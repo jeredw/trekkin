@@ -50,6 +50,14 @@ static const char *const STARSHIP_NAMES[] = {
     "Orion",     "Prometheus",  "Serenity",     "Titan",    "USS Budget",
     "Valkyrie",  "Yamato"};
 
+struct PushBuffer {
+  PushBuffer() : pending_indices(0) {}
+  std::vector<GLfloat> attribs;
+  GLuint vbo;
+  GLsizei num_indices;
+  GLsizei pending_indices;
+};
+
 struct GraphicsState {
   uint32_t screen_width;
   uint32_t screen_height;
@@ -61,25 +69,23 @@ struct GraphicsState {
 
   struct {
     GLuint program;
-    GLuint vbo_quad;
+    GLuint vbo;
     GLuint tex;
     GLint attr_vertex;
   } bg;
 
   struct {
     GLuint program;
-    GLuint vbo_hud;
-    GLsizei num_indices;
-    GLuint hud_tex;
+    PushBuffer push_buffer;
+    GLuint tex;
     GLint attr_vertex;
     GLint attr_tex_coord;
   } hud;
 
   struct {
     GLuint program;
-    GLuint vbo_text;
-    GLsizei num_indices;
-    GLuint font_tex;
+    PushBuffer push_buffer;
+    GLuint tex;
     GLint attr_vertex;
     GLint attr_tex_coord;
     stbtt_bakedchar font_chars[96];  // ASCII 32..126 is 95 glyphs
@@ -88,7 +94,7 @@ struct GraphicsState {
 
 static DisplayUpdate D;
 static GraphicsState G;
-static struct timeval start;
+static float now;
 
 static char *read_file_or_die(const char *path) {
   struct stat st;
@@ -115,13 +121,16 @@ static char *read_file_or_die(const char *path) {
   return buf;
 }
 
-static float get_delta_time() {
-  struct timeval now;
-  gettimeofday(&now, NULL);
+static void advance_time() {
+  static timeval start_time;
+  if (start_time.tv_sec == 0) {
+    gettimeofday(&start_time, NULL);
+  }
 
-  float dt = (now.tv_sec - start.tv_sec);
-  dt += (now.tv_usec - start.tv_usec) / 1000000.0;  // us to s
-  return dt;
+  timeval current_time;
+  gettimeofday(&current_time, NULL);
+  now = current_time.tv_sec - start_time.tv_sec;
+  now += (current_time.tv_usec - start_time.tv_usec) / 1000000.0;  // us to s
 }
 
 static void read_display_update() {
@@ -218,6 +227,24 @@ static GLuint create_shader(const GLchar *source, GLenum type) {
   }
 
   return res;
+}
+
+static GLuint link_program(const GLchar* vshader_source, const GLchar* fshader_source) {
+  GLuint vs = create_shader(vshader_source, GL_VERTEX_SHADER);
+  GLuint fs = create_shader(fshader_source, GL_FRAGMENT_SHADER);
+
+  GLuint program = glCreateProgram();
+  glAttachShader(program, vs);
+  glAttachShader(program, fs);
+  glLinkProgram(program);
+  GLint link_ok = GL_FALSE;
+  glGetProgramiv(program, GL_LINK_STATUS, &link_ok);
+  if (!link_ok) {
+    LOG("failed to link shader");
+    print_shader(program);
+    exit(1);
+  }
+  return program;
 }
 
 static void build_projection_matrix(GLfloat left, GLfloat right, GLfloat bottom,
@@ -318,12 +345,12 @@ static void init_open_gl() {
   build_projection_matrix(0.f, G.screen_width, G.screen_height, 0.f, -1.f, 1.f);
 }
 
-static void init_geometry() {
+static void init_bg_vbo() {
   GLfloat triangle_vertices[] = {-1.0, -1.0, 1.0, -1.0, -1.0, 1.0,
                                  1.0,  -1.0, 1.0, 1.0,  -1.0, 1.0};
 
-  glGenBuffers(1, &G.bg.vbo_quad);
-  glBindBuffer(GL_ARRAY_BUFFER, G.bg.vbo_quad);
+  glGenBuffers(1, &G.bg.vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, G.bg.vbo);
   glBufferData(GL_ARRAY_BUFFER, sizeof(triangle_vertices), triangle_vertices,
                GL_STATIC_DRAW);
 }
@@ -349,21 +376,7 @@ static void init_bg_shaders() {
       "  gl_FragColor = color;"
       "}";
 
-  GLuint vs = create_shader(vshader_source, GL_VERTEX_SHADER);
-  GLuint fs = create_shader(fshader_source, GL_FRAGMENT_SHADER);
-
-  G.bg.program = glCreateProgram();
-  glAttachShader(G.bg.program, vs);
-  glAttachShader(G.bg.program, fs);
-  glLinkProgram(G.bg.program);
-  GLint link_ok = GL_FALSE;
-  glGetProgramiv(G.bg.program, GL_LINK_STATUS, &link_ok);
-  if (!link_ok) {
-    LOG("failed to link shader");
-    print_shader(G.bg.program);
-    exit(1);
-  }
-
+  G.bg.program = link_program(vshader_source, fshader_source);
   G.bg.attr_vertex = glGetAttribLocation(G.bg.program, "coord2d");
 }
 
@@ -389,21 +402,7 @@ static void init_text_shaders() {
       "  gl_FragColor = vec4(color.rgb * mask.a, 1.0);"
       "}";
 
-  GLuint vs = create_shader(vshader_source, GL_VERTEX_SHADER);
-  GLuint fs = create_shader(fshader_source, GL_FRAGMENT_SHADER);
-
-  G.text.program = glCreateProgram();
-  glAttachShader(G.text.program, vs);
-  glAttachShader(G.text.program, fs);
-  glLinkProgram(G.text.program);
-  GLint link_ok = GL_FALSE;
-  glGetProgramiv(G.text.program, GL_LINK_STATUS, &link_ok);
-  if (!link_ok) {
-    LOG("failed to link shader");
-    print_shader(G.text.program);
-    exit(1);
-  }
-
+  G.text.program = link_program(vshader_source, fshader_source);
   G.text.attr_vertex = glGetAttribLocation(G.text.program, "coord2d");
   G.text.attr_tex_coord = glGetAttribLocation(G.text.program, "in_texCoord");
 }
@@ -429,21 +428,7 @@ static void init_hud_shaders() {
       "  gl_FragColor = texture2D(tex, texCoord);"
       "}";
 
-  GLuint vs = create_shader(vshader_source, GL_VERTEX_SHADER);
-  GLuint fs = create_shader(fshader_source, GL_FRAGMENT_SHADER);
-
-  G.hud.program = glCreateProgram();
-  glAttachShader(G.hud.program, vs);
-  glAttachShader(G.hud.program, fs);
-  glLinkProgram(G.hud.program);
-  GLint link_ok = GL_FALSE;
-  glGetProgramiv(G.hud.program, GL_LINK_STATUS, &link_ok);
-  if (!link_ok) {
-    LOG("failed to link shader");
-    print_shader(G.hud.program);
-    exit(1);
-  }
-
+  G.hud.program = link_program(vshader_source, fshader_source);
   G.hud.attr_vertex = glGetAttribLocation(G.hud.program, "coord2d");
   G.hud.attr_tex_coord = glGetAttribLocation(G.hud.program, "in_texCoord");
 }
@@ -462,28 +447,24 @@ static void bake_fonts() {
                        FONT_ATLAS_HEIGHT, 32, 96,
                        G.text.font_chars);  // no guarantee this fits!
   free(ttf);
-  glGenTextures(1, &G.text.font_tex);
-  glBindTexture(GL_TEXTURE_2D, G.text.font_tex);
+  glGenTextures(1, &G.text.tex);
+  glBindTexture(GL_TEXTURE_2D, G.text.tex);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_ALPHA, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT,
                0, GL_ALPHA, GL_UNSIGNED_BYTE, temp_bitmap);
   free(temp_bitmap);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-static void print(GLfloat x, GLfloat y, const char *text) {
-  const int VERTICES_PER_CHAR = 6;
-  const int ATTRS_PER_VERTEX = 4;
-  const int text_len = strlen(text);
-  const GLsizeiptr size =
-      VERTICES_PER_CHAR * ATTRS_PER_VERTEX * text_len * sizeof(GLfloat);
-  G.text.num_indices = VERTICES_PER_CHAR * text_len;
-  GLfloat *attribs = (GLfloat *)malloc(size);
-  GLfloat *p = attribs;
+static void push_text(GLfloat x, GLfloat y, const char *text) {
+  PushBuffer *b = &G.text.push_buffer;
+
 #define PUSH_VERTEX(x, y, s, t) \
-  *p++ = x;                     \
-  *p++ = y;                     \
-  *p++ = s;                     \
-  *p++ = t;
+  b->attribs.push_back(x);      \
+  b->attribs.push_back(y);      \
+  b->attribs.push_back(s);      \
+  b->attribs.push_back(t);      \
+  b->pending_indices++;
+
   while (*text) {
     if (*text >= 32 && *text < 128) {
       stbtt_aligned_quad q;
@@ -498,43 +479,79 @@ static void print(GLfloat x, GLfloat y, const char *text) {
       PUSH_VERTEX(q.x1, q.y0, q.s1, q.t0);
       PUSH_VERTEX(q.x0, q.y0, q.s0, q.t0);
     }
-#undef PUSH_VERTEX
     ++text;
   }
-
-  glGenBuffers(1, &G.text.vbo_text);
-  glBindBuffer(GL_ARRAY_BUFFER, G.text.vbo_text);
-  glBufferData(GL_ARRAY_BUFFER, size, attribs, GL_STATIC_DRAW);
-  free(attribs);
+#undef PUSH_VERTEX
 }
 
-static void show_hud_object(const HudObject &obj) {
-  const int VERTICES_PER_QUAD = 6;
-  const int ATTRS_PER_VERTEX = 4;
-  const GLsizeiptr size =
-      VERTICES_PER_QUAD * ATTRS_PER_VERTEX * sizeof(GLfloat);
-  G.hud.num_indices = VERTICES_PER_QUAD;
-  GLfloat *attribs = (GLfloat *)malloc(size);
-  GLfloat *p = attribs;
+static void push_hud_object(float x, float y, const HudObject &obj) {
+  PushBuffer *b = &G.hud.push_buffer;
+  float x0 = x;
+  float y0 = y;
+  float x1 = x + obj.width;
+  float y1 = y + obj.height;
+
 #define PUSH_VERTEX(x, y, s, t) \
-  *p++ = x;                     \
-  *p++ = y;                     \
-  *p++ = s;                     \
-  *p++ = t;
+  b->attribs.push_back(x);      \
+  b->attribs.push_back(y);      \
+  b->attribs.push_back(s);      \
+  b->attribs.push_back(t);      \
+  b->pending_indices++;
+
   // 00 10
   // 01 11
-  PUSH_VERTEX(obj.x0, obj.y0, obj.s0, obj.t0);
-  PUSH_VERTEX(obj.x0, obj.y1, obj.s0, obj.t1);
-  PUSH_VERTEX(obj.x1, obj.y1, obj.s1, obj.t1);
-  PUSH_VERTEX(obj.x1, obj.y1, obj.s1, obj.t1);
-  PUSH_VERTEX(obj.x1, obj.y0, obj.s1, obj.t0);
-  PUSH_VERTEX(obj.x0, obj.y0, obj.s0, obj.t0);
+  PUSH_VERTEX(x0, y0, obj.s0, obj.t0);
+  PUSH_VERTEX(x0, y1, obj.s0, obj.t1);
+  PUSH_VERTEX(x1, y1, obj.s1, obj.t1);
+  PUSH_VERTEX(x1, y1, obj.s1, obj.t1);
+  PUSH_VERTEX(x1, y0, obj.s1, obj.t0);
+  PUSH_VERTEX(x0, y0, obj.s0, obj.t0);
 #undef PUSH_VERTEX
+}
 
-  glGenBuffers(1, &G.hud.vbo_hud);
-  glBindBuffer(GL_ARRAY_BUFFER, G.hud.vbo_hud);
-  glBufferData(GL_ARRAY_BUFFER, size, attribs, GL_STATIC_DRAW);
-  free(attribs);
+static void clear_push_buffer(PushBuffer *b) {
+  if (b->num_indices == 0) {
+    return;
+  }
+  // num_indices > 0 implies this buffer was submitted before
+  glDeleteBuffers(1, &b->vbo);
+  b->num_indices = 0;
+  b->pending_indices = 0;
+  b->attribs.clear();
+}
+
+static void clear_hud_objects() {
+  clear_push_buffer(&G.hud.push_buffer);
+}
+
+static void clear_text() {
+  clear_push_buffer(&G.text.push_buffer);
+}
+
+static void clear() {
+  clear_text();
+  clear_hud_objects();
+}
+
+static void submit_one_push_buffer(PushBuffer *b) {
+  if (b->pending_indices == 0) {
+    return;
+  }
+  if (b->num_indices > 0) {
+    // num_indices > 0 implies this buffer was submitted before
+    glDeleteBuffers(1, &b->vbo);
+  }
+  glGenBuffers(1, &b->vbo);
+  glBindBuffer(GL_ARRAY_BUFFER, b->vbo);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * b->attribs.size(), b->attribs.data(), GL_STATIC_DRAW);
+  b->num_indices = b->pending_indices;
+  b->pending_indices = 0;
+  b->attribs.clear();
+}
+
+static void submit_push_buffers() {
+  submit_one_push_buffer(&G.hud.push_buffer);
+  submit_one_push_buffer(&G.text.push_buffer);
 }
 
 static void load_wormhole_texture() {
@@ -565,99 +582,139 @@ static void load_wormhole_texture() {
 }
 
 static void load_hud_atlas() {
-  glGenTextures(1, &G.hud.hud_tex);
-  glBindTexture(GL_TEXTURE_2D, G.hud.hud_tex);
+  glGenTextures(1, &G.hud.tex);
+  glBindTexture(GL_TEXTURE_2D, G.hud.tex);
   int width, height, channels;
   unsigned char *data =
       stbi_load(HUD_ATLAS_PATH, &width, &height, &channels, 4);
   assert(width == (int)ATLAS_WIDTH);
   assert(height == (int)ATLAS_HEIGHT);
+  assert(channels == 4);
   glTexImage2D(GL_TEXTURE_2D, 0, GL_RGBA, width, height, 0, GL_RGBA,
                GL_UNSIGNED_BYTE, data);
   stbi_image_free(data);
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-static void draw_bg(GLfloat cx, GLfloat cy, GLfloat time) {
+static void draw_bg() {
   glUseProgram(G.bg.program);
 
   GLuint unif_center = glGetUniformLocation(G.bg.program, "center");
-  glUniform2f(unif_center, cx, cy);
+  glUniform2f(unif_center, 0.5f * G.screen_width, 0.5f * G.screen_height);
   GLuint unif_time = glGetUniformLocation(G.bg.program, "time");
-  glUniform1f(unif_time, time);
+  glUniform1f(unif_time, now);
   GLuint unif_tex = glGetUniformLocation(G.bg.program, "tex");
   glUniform1i(unif_tex, 0);
   glActiveTexture(GL_TEXTURE0);
   glBindTexture(GL_TEXTURE_2D, G.bg.tex);
 
-  glBindBuffer(GL_ARRAY_BUFFER, G.bg.vbo_quad);
+  glBindBuffer(GL_ARRAY_BUFFER, G.bg.vbo);
   glVertexAttribPointer(G.bg.attr_vertex, 2, GL_FLOAT, GL_FALSE, 0, 0);
   glEnableVertexAttribArray(G.bg.attr_vertex);
-  glDrawArrays(GL_TRIANGLES, 0, 6);
+  glDrawArrays(GL_TRIANGLES, 0, 6);  // 2 tris / one fullscreen quad
   glDisableVertexAttribArray(G.bg.attr_vertex);
 }
 
 static void draw_hud() {
+  if (G.hud.push_buffer.num_indices == 0) {
+    return;
+  }
   glUseProgram(G.hud.program);
 
   GLuint unif_projection = glGetUniformLocation(G.hud.program, "projection");
   glUniformMatrix4fv(unif_projection, 1, GL_FALSE, G.projection_matrix);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, G.hud.hud_tex);
+  glBindTexture(GL_TEXTURE_2D, G.hud.tex);
 
-  glBindBuffer(GL_ARRAY_BUFFER, G.hud.vbo_hud);
+  glBindBuffer(GL_ARRAY_BUFFER, G.hud.push_buffer.vbo);
   glVertexAttribPointer(G.hud.attr_vertex, 2, GL_FLOAT, GL_FALSE,
                         4 * sizeof(GLfloat), 0);
   glVertexAttribPointer(G.hud.attr_tex_coord, 2, GL_FLOAT, GL_FALSE,
                         4 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
   glEnableVertexAttribArray(G.hud.attr_vertex);
   glEnableVertexAttribArray(G.hud.attr_tex_coord);
-  glDrawArrays(GL_TRIANGLES, 0, G.hud.num_indices);
+  glDrawArrays(GL_TRIANGLES, 0, G.hud.push_buffer.num_indices);
   glDisableVertexAttribArray(G.hud.attr_vertex);
   glDisableVertexAttribArray(G.hud.attr_tex_coord);
 }
 
 static void draw_text() {
+  if (G.text.push_buffer.num_indices == 0) {
+    return;
+  }
   glUseProgram(G.text.program);
 
   GLuint unif_projection = glGetUniformLocation(G.text.program, "projection");
   glUniformMatrix4fv(unif_projection, 1, GL_FALSE, G.projection_matrix);
 
   glActiveTexture(GL_TEXTURE0);
-  glBindTexture(GL_TEXTURE_2D, G.text.font_tex);
+  glBindTexture(GL_TEXTURE_2D, G.text.tex);
 
-  glBindBuffer(GL_ARRAY_BUFFER, G.text.vbo_text);
+  glBindBuffer(GL_ARRAY_BUFFER, G.text.push_buffer.vbo);
   glVertexAttribPointer(G.text.attr_vertex, 2, GL_FLOAT, GL_FALSE,
                         4 * sizeof(GLfloat), 0);
   glVertexAttribPointer(G.text.attr_tex_coord, 2, GL_FLOAT, GL_FALSE,
                         4 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
   glEnableVertexAttribArray(G.text.attr_vertex);
   glEnableVertexAttribArray(G.text.attr_tex_coord);
-  glDrawArrays(GL_TRIANGLES, 0, G.text.num_indices);
+  glDrawArrays(GL_TRIANGLES, 0, G.text.push_buffer.num_indices);
   glDisableVertexAttribArray(G.text.attr_vertex);
   glDisableVertexAttribArray(G.text.attr_tex_coord);
 }
 
-static void draw(GLfloat cx, GLfloat cy, GLfloat time) {
+static void draw_frame() {
   glClearColor(0.0f, 0.0f, 1.0f, 1.0f);
   glClear(GL_COLOR_BUFFER_BIT | GL_DEPTH_BUFFER_BIT);
 
-  draw_bg(cx, cy, time);
+  draw_bg();
   draw_hud();
   draw_text();
 
   eglSwapBuffers(G.display, G.surface);
 }
 
-static void layout_title() {
-  PANEL_GRAY.x0 = 0;
-  PANEL_GRAY.y0 = 0;
-  PANEL_GRAY.x1 = PANEL_GRAY.x0 + (PANEL_GRAY.src_x1 - PANEL_GRAY.src_x0);
-  PANEL_GRAY.y1 = PANEL_GRAY.y0 + (PANEL_GRAY.src_y1 - PANEL_GRAY.src_y0);
-  show_hud_object(PANEL_GRAY);
+static void layout_title_screen() {
+  clear();
+  float x = G.screen_width / 2 - TITLE.width / 2;
+  float y = G.screen_height / 2 - TITLE.height / 2;
+  push_hud_object(x, y, TITLE);
 }
 
+static void layout_high_scores() {
+  clear();
+}
+
+static void layout() {
+  switch (D.mode) {
+    case ATTRACT: // fallthrough
+    case RESET_GAME: {
+      if (fmod(now, 10) < 5) {
+        layout_title_screen();
+      } else {
+        layout_high_scores();
+      }
+      break;
+    }
+    case START_WAIT: {
+      break;
+    }
+    case SETUP_NEW_MISSION: // fallthrough
+    case NEW_MISSION: {
+      break;
+    }
+    case PLAYING: {
+      break;
+    }
+    case END_WAIT: {
+      break;
+    }
+    case SETUP_GAME_OVER: // fallthrough
+    case GAME_OVER: {
+      break;
+    }
+  }
+}
 }
 
 int display_main() {
@@ -666,21 +723,20 @@ int display_main() {
 
   init_io();
   init_open_gl();
-  init_geometry();
   init_shaders();
   bake_fonts();
   load_hud_atlas();
   load_wormhole_texture();
+  init_bg_vbo();
 
   LOG("display started");
 
-  gettimeofday(&start, NULL);
-  GLfloat cx = 0.5f * G.screen_width;
-  GLfloat cy = 0.5f * G.screen_height;
-  // print(0.f, 62.f, "hello world");
   while (1) {
+    advance_time();
     read_display_update();
-    draw(cx, cy, get_delta_time());
+    layout();
+    submit_push_buffers();
+    draw_frame();
     sleep(0.01);
   }
   return 0;

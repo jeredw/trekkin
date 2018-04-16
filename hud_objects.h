@@ -5,31 +5,24 @@ const float ATLAS_HEIGHT = 480;
 
 struct HudObject {
   HudObject(int image_x0, int image_y0, int image_x1, int image_y1) {
-    src_x0 = (float)image_x0;
-    src_y0 = (float)image_y0;
-    src_x1 = (float)image_x1;
-    src_y1 = (float)image_y1;
-    s0 = src_x0 / ATLAS_WIDTH;
-    t0 = src_y0 / ATLAS_HEIGHT;
-    s1 = src_x1 / ATLAS_WIDTH;
-    t1 = src_y1 / ATLAS_HEIGHT;
+    float x0 = (float)image_x0;
+    float y0 = (float)image_y0;
+    float x1 = (float)image_x1;
+    float y1 = (float)image_y1;
+    width = x1 - x0;
+    height = y1 - y0;
+    s0 = x0 / ATLAS_WIDTH;
+    t0 = y0 / ATLAS_HEIGHT;
+    s1 = x1 / ATLAS_WIDTH;
+    t1 = y1 / ATLAS_HEIGHT;
   }
 
-  // position in atlas
-  float src_x0;
-  float src_y0;
-  float src_x1;
-  float src_y1;
+  float width;
+  float height;
   float s0;
   float t0;
   float s1;
   float t1;
-
-  // position on screen
-  float x0;
-  float y0;
-  float x1;
-  float y1;
 };
 
 static HudObject TITLE = HudObject(14, 133, 581, 264);
