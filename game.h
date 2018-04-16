@@ -53,7 +53,6 @@ enum PanelState {
   PANEL_ACTIVE = 3,
 };
 
-struct Panel;
 struct Command {
   Command()
       : started_tick(0),
@@ -143,4 +142,12 @@ struct Game {
 
   std::vector<Command> commands;
   std::vector<uv_handle_t *> handles;
+};
+
+struct DisplayUpdate {
+  int now;
+  GameMode mode;
+  int score;
+  int play_count;
+  int hull_integrity;
 };

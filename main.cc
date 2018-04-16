@@ -2,9 +2,7 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <stdarg.h>
 #include <string>
-#include <sys/time.h>
 #include <sys/socket.h>
 #include <algorithm>
 
@@ -12,13 +10,19 @@
 #include "picojson/picojson.h"
 
 #include "game.h"
+#include "scores.h"
+#include "log.h"
+
+using namespace trek;
 
 #define CLIENT(x) ((Client *)(((uv_handle_t *)x)->data))
 #define PANEL(x) (CLIENT(x)->panel)
 #define ARRAYSIZE(xs) (sizeof(xs) / sizeof(xs[0]))
 #define CHOOSE(xs) xs[rand() % ARRAYSIZE(xs)]
-#define DLOG(...) \
-  if (verbose) log(__VA_ARGS__)
+#define DLOG(client, ...) \
+  if (verbose) log(client->name.c_str(), __VA_ARGS__)
+#define CLOG(client, ...) log(client->name.c_str(), __VA_ARGS__)
+#define GLOG(...) log("G", __VA_ARGS__)
 
 const uint64_t KEEPALIVE_MSEC = 5000;           // send app level keepalives
 const unsigned int ZOMBIE_SLAYER_MSEC = 10000;  // drop panels that don't ack
@@ -27,14 +31,9 @@ static const char *server_ip = "0.0.0.0";
 static int server_port = 8000;
 static bool verbose = false;
 
-static Game G;       // global mc globalface
-static int now = 0;  // current tick of game loop
-
-static const char *const STARSHIP_NAMES[] = {
-    "Argonaut",  "Bellerophon", "Conquistador", "Daedalus", "Endurance",
-    "Fomalhaut", "Hyperion",    "Icarus",       "Jupiter",  "Nemesis",
-    "Orion",     "Prometheus",  "Serenity",     "Titan",    "USS Budget",
-    "Valkyrie",  "Yamato"};
+static Game G;             // global mc globalface
+static int now = 0;        // current tick of game loop
+static uv_pipe_t display;  // send updates to the display
 
 // status shown after ready but waiting to join game for a while
 static const char *const EXCUSES[] = {
@@ -68,7 +67,7 @@ struct MissionTiming {
 };
 
 static const MissionTiming MISSION_TIMING[] = {
-    // timeout             rest
+    // timeout           rest                command limit
     {ms_to_ticks(20000), ms_to_ticks(10000), 10},
     {ms_to_ticks(20000), ms_to_ticks(5000), 15},
     {ms_to_ticks(15000), ms_to_ticks(5000), 20},
@@ -97,38 +96,6 @@ static void parse_command_line(int argc, char **argv) {
       exit(1);
     }
   }
-}
-
-static std::string timestamp() {
-  char buf[32] = "";
-  timeval tv;
-  if (gettimeofday(&tv, nullptr) == 0) {
-    tm *tmp = localtime(&tv.tv_sec);
-    if (tmp != nullptr) {
-      if (strftime(buf, sizeof(buf), "%T", tmp) != 0) {
-        return std::string(buf) + "." + std::to_string(tv.tv_usec);
-      }
-    }
-  }
-  return std::string("");
-}
-
-static void log(Client *client, const char *fmt, ...) {
-  va_list ap;
-  fprintf(stderr, "[%s %s] ", timestamp().c_str(), client->name.c_str());
-  va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
-  fprintf(stderr, "\n");
-}
-
-static void log(const char *fmt, ...) {
-  va_list ap;
-  fprintf(stderr, "[%s G] ", timestamp().c_str());
-  va_start(ap, fmt);
-  vfprintf(stderr, fmt, ap);
-  va_end(ap);
-  fprintf(stderr, "\n");
 }
 
 template <typename Predicate>
@@ -228,7 +195,7 @@ static void cleanup_client_handle(uv_handle_t *handle) {
 static void on_recv(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
   Client *client = CLIENT(stream);
   if (nread < 0) {
-    log(client, "disconnected: %s", uv_strerror(nread));
+    CLOG(client, "disconnected: %s", uv_strerror(nread));
     uv_close((uv_handle_t *)stream, cleanup_client_handle);
     return;
   }
@@ -241,8 +208,8 @@ static void on_recv(uv_stream_t *stream, ssize_t nread, const uv_buf_t *buf) {
       if (client->got_length_bytes == 4) {
         if (client->want_message_bytes < 0 ||
             client->want_message_bytes > 150000) {
-          log(client, "reset due to %d byte message",
-              client->want_message_bytes);
+          CLOG(client, "reset due to %d byte message",
+               client->want_message_bytes);
           uv_close((uv_handle_t *)stream, cleanup_client_handle);
           return;
         }
@@ -279,12 +246,12 @@ static void send_message(uv_stream_t *stream, const std::string &message,
   uv_buf_t buf = uv_buf_init(dest, 4 + len);
   req->data = (void *)buf.base;
   if (verbose && !really_spammy) {
-    log(client, "sent message %s", message.c_str());
+    CLOG(client, "sent message %s", message.c_str());
   }
   int r = uv_write(req, stream, &buf, 1, [](uv_write_t *req, int status) {
     Client *client = CLIENT(req->handle);
     if (status < 0) {
-      log(client, "reset because write failed: %s", uv_strerror(status));
+      CLOG(client, "reset because write failed: %s", uv_strerror(status));
       uv_close((uv_handle_t *)req->handle, cleanup_client_handle);
       // fallthrough to free buf
     }
@@ -292,7 +259,7 @@ static void send_message(uv_stream_t *stream, const std::string &message,
     free(req);
   });
   if (r != 0) {
-    log(client, "reset because uv_write(!) failed: %s", uv_strerror(r));
+    CLOG(client, "reset because uv_write(!) failed: %s", uv_strerror(r));
     uv_close((uv_handle_t *)req->handle, cleanup_client_handle);
     free(req->data);
     free(req);
@@ -321,21 +288,21 @@ static void keepalive(uv_timer_t *timer) {
 
 static void on_connection(uv_stream_t *server, int status) {
   if (status != 0) {
-    log("on_connection: %s\n", uv_strerror(status));
+    GLOG("on_connection: %s\n", uv_strerror(status));
     return;
   }
 
   uv_tcp_t *handle = init_client_handle();
   int r = uv_tcp_init(uv_default_loop(), handle);
   if (r != 0) {
-    log("tcp_init: %s\n", uv_strerror(r));
+    GLOG("tcp_init: %s\n", uv_strerror(r));
     cleanup_client_handle((uv_handle_t *)handle);
     return;
   }
 
   r = uv_accept(server, (uv_stream_t *)handle);
   if (r != 0) {
-    log("accept: %s\n", uv_strerror(r));
+    GLOG("accept: %s\n", uv_strerror(r));
     uv_close((uv_handle_t *)handle, cleanup_client_handle);
     return;
   }
@@ -344,7 +311,7 @@ static void on_connection(uv_stream_t *server, int status) {
   uv_os_fd_t fd;
   r = uv_fileno((uv_handle_t *)handle, &fd);
   if (r != 0) {
-    log("uv_fileno: %s\n", uv_strerror(r));
+    GLOG("uv_fileno: %s\n", uv_strerror(r));
     uv_close((uv_handle_t *)handle, cleanup_client_handle);
     return;
   }
@@ -361,7 +328,7 @@ static void on_connection(uv_stream_t *server, int status) {
     client->name =
         std::string(host) + ":" + std::to_string(ntohs(addr.sin_port));
   }
-  log(client, "connected!");
+  CLOG(client, "connected!");
   r = uv_read_start((uv_stream_t *)handle,
                     [](uv_handle_t *handle, size_t ignored, uv_buf_t *buf) {
                       Client *client = CLIENT(handle);
@@ -370,7 +337,7 @@ static void on_connection(uv_stream_t *server, int status) {
                     },
                     on_recv);
   if (r != 0) {
-    log(client, "reset because read_start failed: %s", uv_strerror(r));
+    CLOG(client, "reset because read_start failed: %s", uv_strerror(r));
     uv_close((uv_handle_t *)handle, cleanup_client_handle);
     return;
   }
@@ -571,7 +538,7 @@ static void panel_state_machine(uv_handle_t *handle) {
       if (panel->controls.empty()) {
         break;
       }
-      log(client, "PANEL_NEW -> PANEL_IDLE");
+      CLOG(client, "PANEL_NEW -> PANEL_IDLE");
       panel->state = PANEL_IDLE;
       // fallthrough to next case (don't wait a tick to prompt player)
     }
@@ -582,13 +549,16 @@ static void panel_state_machine(uv_handle_t *handle) {
       });
       if (command != G.commands.end() && command->done) {
         G.commands.erase(command);
-        log(client, "PANEL_IDLE -> PANEL_READY");
+        CLOG(client, "PANEL_IDLE -> PANEL_READY");
         panel->state = PANEL_READY;
         panel->ready_message_tick = now;
         set_status(handle, "*** Ready! ***");
         set_display(handle, "");
         set_progress(handle, 100);
       } else if (command == G.commands.end() || now >= command->deadline_tick) {
+        if (command != G.commands.end()) {
+          G.commands.erase(command);
+        }
         command =
             assign_command(handle, handle, PANEL_IDLE_COMMAND_TIMEOUT_TICKS);
         if (command != G.commands.end()) {
@@ -603,7 +573,7 @@ static void panel_state_machine(uv_handle_t *handle) {
     case PANEL_READY: {
       if (now - panel->last_state_change_tick >= PANEL_IDLE_AFTER_TICKS) {
         remove_associated_commands(handle);
-        log(client, "PANEL_READY -> PANEL_IDLE");
+        CLOG(client, "PANEL_READY -> PANEL_IDLE");
         panel->state = PANEL_IDLE;
         break;
       }
@@ -617,13 +587,38 @@ static void panel_state_machine(uv_handle_t *handle) {
     case PANEL_ACTIVE: {
       if (now - panel->last_state_change_tick >= PANEL_IDLE_AFTER_TICKS) {
         remove_associated_commands(handle);
-        log(client, "PANEL_ACTIVE -> PANEL_IDLE");
+        CLOG(client, "PANEL_ACTIVE -> PANEL_IDLE");
         panel->state = PANEL_IDLE;
         break;
       }
       G.num_active_panels++;
       break;
     }
+  }
+}
+
+static void send_display_update() {
+  uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
+  DisplayUpdate *update = new DisplayUpdate;
+  update->now = now;
+  update->mode = G.mode;
+  update->score = G.score;
+  update->play_count = G.play_count;
+  update->hull_integrity = hull_integrity();
+  uv_buf_t buf = uv_buf_init((char *)update, sizeof(DisplayUpdate));
+  req->data = (void *)buf.base;
+  int r = uv_write(req, (uv_stream_t *)&display, &buf, 1,
+                   [](uv_write_t *req, int status) {
+    if (status < 0) {
+      GLOG("display update failed: %s", uv_strerror(status));
+    }
+    free(req->data);
+    free(req);
+  });
+  if (r != 0) {
+    GLOG("display update failed: %s", uv_strerror(r));
+    free(req->data);
+    free(req);
   }
 }
 
@@ -634,7 +629,7 @@ static void game(uv_timer_t *timer) {
   switch (G.mode) {
     case ATTRACT: {
       if (G.num_ready_panels > 0) {
-        log("ATTRACT -> START_WAIT (%d ready)", G.num_ready_panels);
+        GLOG("ATTRACT -> START_WAIT (%d ready)", G.num_ready_panels);
         G.mode = START_WAIT;
         G.start_at_tick = 0;
       }
@@ -642,7 +637,7 @@ static void game(uv_timer_t *timer) {
     }
     case START_WAIT: {
       if (G.num_ready_panels == 0) {
-        log("START_WAIT -> ATTRACT");
+        GLOG("START_WAIT -> ATTRACT");
         G.mode = ATTRACT;
       } else if (G.num_ready_panels == 1) {
         G.start_at_tick = 0;
@@ -650,7 +645,7 @@ static void game(uv_timer_t *timer) {
         if (G.start_at_tick == 0) {
           G.start_at_tick = now + START_WAIT_TICKS;
         } else if (now >= G.start_at_tick) {
-          log("START_WAIT -> SETUP_NEW_MISSION");
+          GLOG("START_WAIT -> SETUP_NEW_MISSION");
           G.mode = SETUP_NEW_MISSION;
         }
       }
@@ -663,30 +658,30 @@ static void game(uv_timer_t *timer) {
       G.mission_start_tick = now + MISSION_INTRO_TICKS;
       G.mission_end_tick = G.mission_start_tick + MISSION_TIME_LIMIT_TICKS;
       G.mission_command_count = 0;
-      log("SETUP_NEW_MISSION -> NEW_MISSION");
+      GLOG("SETUP_NEW_MISSION -> NEW_MISSION");
       G.mode = NEW_MISSION;
       break;
     }
     case NEW_MISSION: {
       if (now >= G.mission_start_tick) {
-        log("NEW_MISSION -> PLAYING");
+        GLOG("NEW_MISSION -> PLAYING");
         G.mode = PLAYING;
       }
       break;
     }
     case PLAYING: {
       if (G.num_ready_panels + G.num_active_panels < 2) {
-        log("PLAYING -> END_WAIT");
+        GLOG("PLAYING -> END_WAIT");
         G.mode = END_WAIT;
         G.end_at_tick = now + END_WAIT_TICKS;
         clear_non_idle_commands();
       } else if (hull_integrity() == 0) {
-        log("PLAYING -> SETUP_GAME_OVER");
+        GLOG("PLAYING -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
         clear_non_idle_commands();
       } else if (G.mission_command_count >= mission_timing().command_limit ||
                  now >= G.mission_end_tick) {
-        log("PLAYING -> SETUP_NEW_MISSION");
+        GLOG("PLAYING -> SETUP_NEW_MISSION");
         G.mode = SETUP_NEW_MISSION;
         clear_non_idle_commands();
       } else {
@@ -697,18 +692,20 @@ static void game(uv_timer_t *timer) {
     }
     case END_WAIT: {
       if (G.num_ready_panels + G.num_active_panels >= 2) {
-        log("END_WAIT -> PLAYING");
+        GLOG("END_WAIT -> PLAYING");
         G.mode = PLAYING;
         G.mission_command_count = 0;
         G.mission_end_tick = now + END_WAIT_TICKS;
       } else if (now >= G.end_at_tick) {
-        log("END_WAIT -> SETUP_GAME_OVER");
+        GLOG("END_WAIT -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
       }
       break;
     }
     case SETUP_GAME_OVER: {
+      add_high_score(HighScore(G.play_count, G.score));
       G.play_count++;
+      G.score = 0;
       G.mission = 0;
       G.mission_start_tick = 0;
       G.mission_end_tick = 0;
@@ -725,13 +722,13 @@ static void game(uv_timer_t *timer) {
           set_progress(handle, 0);
         }
       }
-      log("SETUP_GAME_OVER -> GAME_OVER");
+      GLOG("SETUP_GAME_OVER -> GAME_OVER");
       G.mode = GAME_OVER;
       // fallthrough
     }
     case GAME_OVER: {
       if (now >= G.end_at_tick) {
-        log("GAME_OVER -> RESET_GAME");
+        GLOG("GAME_OVER -> RESET_GAME");
         G.mode = RESET_GAME;
       }
       break;
@@ -743,17 +740,18 @@ static void game(uv_timer_t *timer) {
           PANEL(handle).state = PANEL_IDLE;
         }
       }
-      log("RESET_GAME -> ATTRACT");
+      GLOG("RESET_GAME -> ATTRACT");
       G.mode = ATTRACT;
       break;
     }
   }
+  send_display_update();
   now++;
 }
 
 static inline void must(int error_code, const char *prefix) {
   if (error_code != 0) {
-    fprintf(stderr, "%s: %s", prefix, uv_strerror(error_code));
+    fprintf(stderr, "%s: %s\n", prefix, uv_strerror(error_code));
     exit(1);
   }
 }
@@ -781,16 +779,52 @@ static void start_game_timer(uv_timer_t *timer, uv_loop_t *loop) {
        "timer_start");
 }
 
+static void start_display(uv_process_t *display_process, char *program,
+                          uv_loop_t *loop) {
+  must(uv_pipe_init(loop, &display, 0), "pipe_init");
+
+  uv_process_options_t options;
+  options.file = program;
+  const char *args[2];
+  args[0] = "display";
+  args[1] = nullptr;
+  options.args = (char **)args;
+  options.env = nullptr;
+  options.cwd = nullptr;
+  options.flags = 0;
+  uv_stdio_container_t child_stdio[3];
+  child_stdio[0].flags = (uv_stdio_flags)(UV_CREATE_PIPE | UV_READABLE_PIPE);
+  child_stdio[0].data.stream = (uv_stream_t *)&display;
+  child_stdio[1].flags = UV_IGNORE;
+  child_stdio[2].flags = UV_INHERIT_FD;
+  child_stdio[2].data.fd = 2;
+  options.stdio = child_stdio;
+  options.stdio_count = 3;
+  options.exit_cb =
+      [](uv_process_t *process, int64_t exit_status, int term_signal) {
+    GLOG("display process exit: status=%d signal=%d", exit_status, term_signal);
+  };
+  must(uv_spawn(loop, display_process, &options), "spawn");
+}
+
+extern int display_main();
+
 int main(int argc, char **argv) {
   parse_command_line(argc, argv);
+  if (strcmp(argv[0], "display") == 0) {
+    display_main();
+    return 0;
+  }
 
   uv_tcp_t server;
   uv_timer_t keepalive_timer;
   uv_timer_t game_timer;
+  uv_process_t display_process;
   uv_loop_t *loop = uv_default_loop();
   start_server(&server, loop);
   start_keepalive_timer(&keepalive_timer, loop);
   start_game_timer(&game_timer, loop);
+  start_display(&display_process, argv[0], loop);
 
   int r = uv_run(loop, UV_RUN_DEFAULT);
 

@@ -11,16 +11,18 @@ Build with `make` and run `trekkin` with desired options:
 
 * `-ip IPADDR` ip address server should listen on
 * `-port PORT` tcp port server should listen on
-* `-verbose` print debug messages to stderr
+* `-verbose` spew debug messages to stderr
 
-Ye cannae change the laws of physics.
+At present, ye cannae change the laws of physics.
 
 # Dependencies
 
-- Requires `libuv1`, but raspbian jessie only has `libuv-0.10`. The libuv
-  submodule has the right version.
-- Requires the `picojson` parser from the picojson submodule.
-- Requires `/opt/vc/lib` libraries, in raspbian jessie by default.
+- `libuv1`: raspbian jessie only has `libuv-0.10` so the libuv submodule has
+  the right version.
+- `picojson`: in the picojson submodule.
+- `/opt/vc/lib`: these ship with raspbian jessie.
+- `stb`: <3 [stb](https://github.com/nothings/stb). Using `stb_truetype.h`,
+  `stb_image.h` in `stb`.
 - Written for Raspberry Pi 3 which has a decent embedded GPU. Be sure the GPU
   has at least 128MB RAM and you are not using the experimental DRM driver. My
   `/boot/config.txt` has:
@@ -123,15 +125,15 @@ mission# per completed mission.
 Each panel shows one command at a time, which may be either for that panel or
 for another panel. Players should be doing a mix of pushing buttons and telling
 other people to push buttons. When assigning commands to show on each panel, we
-always choose the panel that was least recently assigned a command, breaking
-ties randomly.
+always choose the panel that was least recently assigned a command to _do_,
+breaking ties randomly.
 
 ## Networking
 
 The game uses TCP on a LAN with small messages so clients and servers should
 turn off Nagle's algorithm. The server resets a client connection when
 - It's been more than 10 seconds waiting for a TCP ACK.
-- There is a protocol framing error (a message > 150k).
+- There is a likely protocol framing error (a message > 150k).
 - There is a non `EAGAIN` read/write error.
 - Something is wrong with libuv (hopefully not).
 - It's worse than that - he's dead, Jim.
@@ -228,12 +230,22 @@ about what's happening in the game to keep things interesting.
 Sets a progress bar located somewhere on a panel to an integer percentage
 between 0 and 100. This is used to count down the time remaining for commands.
 
+## High scores
+
+High scores are stored in a text file `high_scores.txt`. Because there is no
+way to enter in a team name, scores are just keyed on the current play count,
+which corresponds to one of several ship names.
+
 ## Display
 
 The Raspberry Pi has a weird Broadcom GPU with its own compositing library and
 an OpenGL ES2 driver, so that's what we use.
 
-The display program runs in a child process.
+The display program runs in a child process and reads updates from a pipe on
+its stdin. The updates are a small fixed size binary message that says what's
+going on, e.g. what mode the game is in and what the current score is.
+
+TODO: Write more about this and use some of these catchlines
 There's Klingons on the starboard bow, Jim.
 It's life, Jim, but not as we know it.
 We come in peace -- shoot to kill, men.
