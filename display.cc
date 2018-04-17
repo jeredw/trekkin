@@ -26,8 +26,9 @@
 
 typedef void *uv_handle_t;  // the display program doesn't use libuv
 #include "game.h"
-#include "scores.h"
 #include "log.h"
+#include "misc.h"
+#include "scores.h"
 
 #define LOG(...) log("D", __VA_ARGS__)
 
@@ -49,6 +50,17 @@ static const char *const STARSHIP_NAMES[] = {
     "Fomalhaut", "Hyperion",    "Icarus",       "Jupiter",  "Nemesis",
     "Orion",     "Prometheus",  "Serenity",     "Titan",    "USS Budget",
     "Valkyrie",  "Yamato"};
+
+static const GLfloat colors[8][4] = {
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+    {1.f, 0.f, 1.f, 1.f},
+};
 
 struct PushBuffer {
   PushBuffer() : pending_indices(0) {}
@@ -88,6 +100,7 @@ struct GraphicsState {
     GLuint tex;
     GLint attr_vertex;
     GLint attr_tex_coord;
+    GLint attr_color;
     stbtt_bakedchar font_chars[96];  // ASCII 32..126 is 95 glyphs
   } text;
 };
@@ -229,7 +242,8 @@ static GLuint create_shader(const GLchar *source, GLenum type) {
   return res;
 }
 
-static GLuint link_program(const GLchar* vshader_source, const GLchar* fshader_source) {
+static GLuint link_program(const GLchar *vshader_source,
+                           const GLchar *fshader_source) {
   GLuint vs = create_shader(vshader_source, GL_VERTEX_SHADER);
   GLuint fs = create_shader(fshader_source, GL_FRAGMENT_SHADER);
 
@@ -343,6 +357,9 @@ static void init_open_gl() {
   assert(EGL_FALSE != result);
   glViewport(0, 0, G.screen_width, G.screen_height);
   build_projection_matrix(0.f, G.screen_width, G.screen_height, 0.f, -1.f, 1.f);
+
+  glEnable(GL_BLEND);
+  glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
 }
 
 static void init_bg_vbo() {
@@ -384,27 +401,29 @@ static void init_text_shaders() {
   const GLchar *vshader_source =
       "attribute vec2 coord2d;"
       "attribute vec2 in_texCoord;"
+      "attribute vec4 in_color;"
       "uniform mat4 projection;"
       "varying vec2 texCoord;"
+      "varying vec4 color;"
       "void main(void) {"
       "  gl_Position = projection * vec4(coord2d, 0.0, 1.0);"
       "  texCoord = in_texCoord;"
+      "  color = in_color;"
       "}";
 
   const GLchar *fshader_source =
       "varying vec2 texCoord;"
-      "uniform vec2 center;"
-      "uniform float time;"
+      "varying vec4 color;"
       "uniform sampler2D tex;"
       "void main(void) {"
-      "  vec4 color = vec4(1.0, 0.0, 1.0, 1.0);"
       "  vec4 mask = texture2D(tex, texCoord);"
-      "  gl_FragColor = vec4(color.rgb * mask.a, 1.0);"
+      "  gl_FragColor = color * mask.a;"
       "}";
 
   G.text.program = link_program(vshader_source, fshader_source);
   G.text.attr_vertex = glGetAttribLocation(G.text.program, "coord2d");
   G.text.attr_tex_coord = glGetAttribLocation(G.text.program, "in_texCoord");
+  G.text.attr_color = glGetAttribLocation(G.text.program, "in_color");
 }
 
 static void init_hud_shaders() {
@@ -455,14 +474,48 @@ static void bake_fonts() {
   glTexParameteri(GL_TEXTURE_2D, GL_TEXTURE_MIN_FILTER, GL_LINEAR);
 }
 
-static void push_text(GLfloat x, GLfloat y, const char *text) {
-  PushBuffer *b = &G.text.push_buffer;
+static void measure_text(const char *text, float *width, float *height) {
+  float x = 0;
+  float y = 0;
+  float x0 = 0;
+  float x1 = 0;
+  float y0 = 0;
+  float y1 = 0;
+  while (*text) {
+    if (*text >= 32 && *text < 128) {
+      stbtt_aligned_quad q;
+      stbtt_GetBakedQuad(G.text.font_chars, FONT_ATLAS_WIDTH, FONT_ATLAS_HEIGHT,
+                         *text - 32, &x, &y, &q, 1 /* OpenGL */);
+      x0 = std::min(x0, q.x0);
+      y0 = std::min(y0, q.y0);
+      x1 = std::max(x1, q.x1);
+      y1 = std::max(y1, q.y1);
+    }
+    ++text;
+  }
+  if (width != nullptr) {
+    *width = x1 - x0 + 1.f;
+  }
+  if (height != nullptr) {
+    *height = y1 - y0 + 1.f;
+  }
+}
 
-#define PUSH_VERTEX(x, y, s, t) \
-  b->attribs.push_back(x);      \
-  b->attribs.push_back(y);      \
-  b->attribs.push_back(s);      \
-  b->attribs.push_back(t);      \
+static void push_text(GLfloat x0, GLfloat y0, const GLfloat color[4],
+                      const char *text, float scale = 1.0) {
+  PushBuffer *b = &G.text.push_buffer;
+  float x = x0;
+  float y = y0;
+
+#define PUSH_VERTEX(x, y, s, t, c) \
+  b->attribs.push_back(x);         \
+  b->attribs.push_back(y);         \
+  b->attribs.push_back(s);         \
+  b->attribs.push_back(t);         \
+  b->attribs.push_back(c[0]);      \
+  b->attribs.push_back(c[1]);      \
+  b->attribs.push_back(c[2]);      \
+  b->attribs.push_back(c[3]);      \
   b->pending_indices++;
 
   while (*text) {
@@ -472,12 +525,18 @@ static void push_text(GLfloat x, GLfloat y, const char *text) {
                          *text - 32, &x, &y, &q, 1 /* OpenGL */);
       // 00 10
       // 01 11
-      PUSH_VERTEX(q.x0, q.y0, q.s0, q.t0);
-      PUSH_VERTEX(q.x0, q.y1, q.s0, q.t1);
-      PUSH_VERTEX(q.x1, q.y1, q.s1, q.t1);
-      PUSH_VERTEX(q.x1, q.y1, q.s1, q.t1);
-      PUSH_VERTEX(q.x1, q.y0, q.s1, q.t0);
-      PUSH_VERTEX(q.x0, q.y0, q.s0, q.t0);
+      PUSH_VERTEX(x0 + scale * (q.x0 - x0), y0 + scale * (q.y0 - y0), q.s0,
+                  q.t0, color);
+      PUSH_VERTEX(x0 + scale * (q.x0 - x0), y0 + scale * (q.y1 - y0), q.s0,
+                  q.t1, color);
+      PUSH_VERTEX(x0 + scale * (q.x1 - x0), y0 + scale * (q.y1 - y0), q.s1,
+                  q.t1, color);
+      PUSH_VERTEX(x0 + scale * (q.x1 - x0), y0 + scale * (q.y1 - y0), q.s1,
+                  q.t1, color);
+      PUSH_VERTEX(x0 + scale * (q.x1 - x0), y0 + scale * (q.y0 - y0), q.s1,
+                  q.t0, color);
+      PUSH_VERTEX(x0 + scale * (q.x0 - x0), y0 + scale * (q.y0 - y0), q.s0,
+                  q.t0, color);
     }
     ++text;
   }
@@ -509,28 +568,20 @@ static void push_hud_object(float x, float y, const HudObject &obj) {
 #undef PUSH_VERTEX
 }
 
-static void clear_push_buffer(PushBuffer *b) {
+static void clear_one_push_buffer(PushBuffer *b) {
+  b->pending_indices = 0;
+  b->attribs.clear();
   if (b->num_indices == 0) {
     return;
   }
   // num_indices > 0 implies this buffer was submitted before
   glDeleteBuffers(1, &b->vbo);
   b->num_indices = 0;
-  b->pending_indices = 0;
-  b->attribs.clear();
 }
 
-static void clear_hud_objects() {
-  clear_push_buffer(&G.hud.push_buffer);
-}
-
-static void clear_text() {
-  clear_push_buffer(&G.text.push_buffer);
-}
-
-static void clear() {
-  clear_text();
-  clear_hud_objects();
+static void clear_push_buffers() {
+  clear_one_push_buffer(&G.text.push_buffer);
+  clear_one_push_buffer(&G.hud.push_buffer);
 }
 
 static void submit_one_push_buffer(PushBuffer *b) {
@@ -543,7 +594,8 @@ static void submit_one_push_buffer(PushBuffer *b) {
   }
   glGenBuffers(1, &b->vbo);
   glBindBuffer(GL_ARRAY_BUFFER, b->vbo);
-  glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * b->attribs.size(), b->attribs.data(), GL_STATIC_DRAW);
+  glBufferData(GL_ARRAY_BUFFER, sizeof(GLfloat) * b->attribs.size(),
+               b->attribs.data(), GL_STATIC_DRAW);
   b->num_indices = b->pending_indices;
   b->pending_indices = 0;
   b->attribs.clear();
@@ -653,14 +705,18 @@ static void draw_text() {
 
   glBindBuffer(GL_ARRAY_BUFFER, G.text.push_buffer.vbo);
   glVertexAttribPointer(G.text.attr_vertex, 2, GL_FLOAT, GL_FALSE,
-                        4 * sizeof(GLfloat), 0);
+                        8 * sizeof(GLfloat), 0);
   glVertexAttribPointer(G.text.attr_tex_coord, 2, GL_FLOAT, GL_FALSE,
-                        4 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
+                        8 * sizeof(GLfloat), (void *)(2 * sizeof(GLfloat)));
+  glVertexAttribPointer(G.text.attr_color, 4, GL_FLOAT, GL_FALSE,
+                        8 * sizeof(GLfloat), (void *)(4 * sizeof(GLfloat)));
   glEnableVertexAttribArray(G.text.attr_vertex);
   glEnableVertexAttribArray(G.text.attr_tex_coord);
+  glEnableVertexAttribArray(G.text.attr_color);
   glDrawArrays(GL_TRIANGLES, 0, G.text.push_buffer.num_indices);
   glDisableVertexAttribArray(G.text.attr_vertex);
   glDisableVertexAttribArray(G.text.attr_tex_coord);
+  glDisableVertexAttribArray(G.text.attr_color);
 }
 
 static void draw_frame() {
@@ -675,19 +731,43 @@ static void draw_frame() {
 }
 
 static void layout_title_screen() {
-  clear();
   float x = G.screen_width / 2 - TITLE.width / 2;
   float y = G.screen_height / 2 - TITLE.height / 2;
   push_hud_object(x, y, TITLE);
 }
 
 static void layout_high_scores() {
-  clear();
+  const float SCALE = 0.6;
+  float starship_width;
+  measure_text("Conquistador", &starship_width, nullptr);
+  starship_width *= SCALE;
+  float score_width;
+  measure_text("999999", &score_width, nullptr);
+  score_width *= SCALE;
+  float padding = (G.screen_width - score_width - starship_width) / 2;
+
+  float lineheight;
+  measure_text("High scores", nullptr, &lineheight);
+  float y = lineheight * 1.5;
+  push_text(padding, y, colors[0], "Leaderboard");
+  y += 1.5 * lineheight;
+
+  std::vector<HighScore> scores;
+  get_high_scores(&scores);
+  for (const auto &high_score : scores) {
+    const char *name =
+        STARSHIP_NAMES[high_score.game_number % ARRAYSIZE(STARSHIP_NAMES)];
+    int score = std::min(high_score.score, 999999);
+    push_text(padding, y, colors[0], name, SCALE /* scale */);
+    push_text(G.screen_width - score_width - padding, y, colors[0],
+              std::to_string(score).c_str(), SCALE /* scale */);
+    y += SCALE * lineheight + 1;
+  }
 }
 
 static void layout() {
   switch (D.mode) {
-    case ATTRACT: // fallthrough
+    case ATTRACT:  // fallthrough
     case RESET_GAME: {
       if (fmod(now, 10) < 5) {
         layout_title_screen();
@@ -699,7 +779,7 @@ static void layout() {
     case START_WAIT: {
       break;
     }
-    case SETUP_NEW_MISSION: // fallthrough
+    case SETUP_NEW_MISSION:  // fallthrough
     case NEW_MISSION: {
       break;
     }
@@ -709,7 +789,7 @@ static void layout() {
     case END_WAIT: {
       break;
     }
-    case SETUP_GAME_OVER: // fallthrough
+    case SETUP_GAME_OVER:  // fallthrough
     case GAME_OVER: {
       break;
     }
@@ -734,6 +814,7 @@ int display_main() {
   while (1) {
     advance_time();
     read_display_update();
+    clear_push_buffers();
     layout();
     submit_push_buffers();
     draw_frame();

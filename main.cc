@@ -10,15 +10,14 @@
 #include "picojson/picojson.h"
 
 #include "game.h"
-#include "scores.h"
 #include "log.h"
+#include "misc.h"
+#include "scores.h"
 
 using namespace trek;
 
 #define CLIENT(x) ((Client *)(((uv_handle_t *)x)->data))
 #define PANEL(x) (CLIENT(x)->panel)
-#define ARRAYSIZE(xs) (sizeof(xs) / sizeof(xs[0]))
-#define CHOOSE(xs) xs[rand() % ARRAYSIZE(xs)]
 #define DLOG(client, ...) \
   if (verbose) log(client->name.c_str(), __VA_ARGS__)
 #define CLOG(client, ...) log(client->name.c_str(), __VA_ARGS__)
