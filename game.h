@@ -98,6 +98,7 @@ struct Panel {
 struct Client {
   Client() : got_length_bytes(0), want_message_bytes(0) {}
 
+  int id;
   std::string name;
   ssize_t got_length_bytes;
   ssize_t want_message_bytes;
@@ -120,6 +121,7 @@ struct Game {
         good_commands(0),
         bad_commands(0),
         score(0),
+        connection_count(0),
         play_count(0) {}
 
   GameMode mode;
@@ -138,16 +140,22 @@ struct Game {
   int good_commands;
   int bad_commands;
   int score;
+  int connection_count;
   int play_count;
 
   std::vector<Command> commands;
   std::vector<uv_handle_t *> handles;
 };
 
+// fixed size, no pointers
+const int PANEL_DISPLAY_SLOTS = 8;
 struct DisplayUpdate {
   int now;
   GameMode mode;
   int score;
   int play_count;
   int hull_integrity;
+  int num_panels = 0;
+  int panel_id[PANEL_DISPLAY_SLOTS];
+  PanelState panel_state[PANEL_DISPLAY_SLOTS];
 };

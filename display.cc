@@ -51,15 +51,19 @@ static const char *const STARSHIP_NAMES[] = {
     "Orion",     "Prometheus",  "Serenity",     "Titan",    "USS Budget",
     "Valkyrie",  "Yamato"};
 
-static const GLfloat colors[8][4] = {
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
-    {1.f, 0.f, 1.f, 1.f},
+#define RGB(r, g, b) {(r) / 255.f, (g) / 255.f, (b) / 255.f, 1.f}
+static const GLfloat colors[][4] = {
+    RGB(249, 168, 37),
+    RGB(229, 28, 35),
+    RGB(216, 27, 96),
+    RGB(142, 36, 170),
+    RGB(57, 73, 171),
+    RGB(3, 155, 229),
+    RGB(0, 137, 123),
+    RGB(10, 143, 8),
+    RGB(192, 202, 51),
+    RGB(255, 179, 0),
+    RGB(244, 81, 30),
 };
 
 struct PushBuffer {
@@ -543,12 +547,12 @@ static void push_text(GLfloat x0, GLfloat y0, const GLfloat color[4],
 #undef PUSH_VERTEX
 }
 
-static void push_hud_object(float x, float y, const HudObject &obj) {
+static void push_hud_object(float x, float y, const HudObject &obj, float scale = 1.f) {
   PushBuffer *b = &G.hud.push_buffer;
   float x0 = x;
   float y0 = y;
-  float x1 = x + obj.width;
-  float y1 = y + obj.height;
+  float x1 = x + obj.width * scale;
+  float y1 = y + obj.height * scale;
 
 #define PUSH_VERTEX(x, y, s, t) \
   b->attribs.push_back(x);      \
@@ -752,17 +756,49 @@ static void layout_high_scores() {
   push_text(padding, y, colors[0], "Leaderboard");
   y += 1.5 * lineheight;
 
+  int color = 1;
   std::vector<HighScore> scores;
   get_high_scores(&scores);
   for (const auto &high_score : scores) {
     const char *name =
         STARSHIP_NAMES[high_score.game_number % ARRAYSIZE(STARSHIP_NAMES)];
     int score = std::min(high_score.score, 999999);
-    push_text(padding, y, colors[0], name, SCALE /* scale */);
-    push_text(G.screen_width - score_width - padding, y, colors[0],
+    push_text(padding, y, colors[color % ARRAYSIZE(colors)], name, SCALE /* scale */);
+    push_text(G.screen_width - score_width - padding, y, colors[color % ARRAYSIZE(colors)],
               std::to_string(score).c_str(), SCALE /* scale */);
     y += SCALE * lineheight + 1;
+    color++;
   }
+}
+
+static void push_panel_state() {
+  float padding = 8;
+  float scale = 1.0f;
+  float panel_width = GRAY_PANEL.width;
+  float fill_width = padding + (panel_width + padding) * D.num_panels;
+  float gap = D.num_panels == 1 ? 0 : (G.screen_width - fill_width) / (D.num_panels - 1);
+  if (fill_width > G.screen_width) {
+    fill_width = G.screen_width - padding - padding * D.num_panels;
+    panel_width = fill_width / D.num_panels;
+    scale = panel_width / GRAY_PANEL.width;
+    gap = 0;
+  }
+  float spacing = padding + panel_width + gap;
+  float x = padding;
+  float y = G.screen_height - scale * GRAY_PANEL.height;
+  for (int i = 0; i < D.num_panels; i++) {
+    if (D.panel_state[i] == PANEL_NEW || D.panel_state[i] == PANEL_IDLE) {
+      push_hud_object(x, y, GRAY_PANEL, scale);
+    } else {
+      int color = D.panel_id[i] % ARRAYSIZE(ACTIVE_PANELS);
+      push_hud_object(x, y, ACTIVE_PANELS[color], scale);
+    }
+    x += spacing;
+  }
+}
+
+static void layout_start_wait() {
+  push_panel_state();
 }
 
 static void layout() {
@@ -777,6 +813,7 @@ static void layout() {
       break;
     }
     case START_WAIT: {
+      layout_start_wait();
       break;
     }
     case SETUP_NEW_MISSION:  // fallthrough

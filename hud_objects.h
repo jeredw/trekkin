@@ -31,11 +31,13 @@ static HudObject SHIP_80 = HudObject(143, 21, 254, 127);
 static HudObject SHIP_60 = HudObject(262, 21, 373, 127);
 static HudObject SHIP_40 = HudObject(379, 21, 490, 127);
 static HudObject SHIP_20 = HudObject(495, 21, 606, 127);
-static HudObject PANEL_GRAY = HudObject(21, 276, 156, 341);
-static HudObject PANEL_BLUE = HudObject(160, 276, 295, 341);
-static HudObject PANEL_ORANGE = HudObject(21, 344, 156, 409);
-static HudObject PANEL_GREEN = HudObject(160, 344, 295, 409);
-static HudObject PANEL_PURPLE = HudObject(21, 412, 156, 477);
+static HudObject GRAY_PANEL = HudObject(21, 276, 156, 341);
+static HudObject ACTIVE_PANELS[] = {
+  HudObject(160, 276, 295, 341),
+  HudObject(21, 344, 156, 409),
+  HudObject(160, 344, 295, 409),
+  HudObject(21, 412, 156, 477),
+};
 static HudObject HULL_100 = HudObject(408, 272, 639, 309);
 static HudObject HULL_80 = HudObject(417, 312, 639, 349);
 static HudObject HULL_60 = HudObject(417, 353, 639, 390);

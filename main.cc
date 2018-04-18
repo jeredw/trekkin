@@ -324,8 +324,9 @@ static void on_connection(uv_stream_t *server, int status) {
   if (uv_tcp_getpeername(handle, (sockaddr *)&addr, &name_len) == 0) {
     char host[32] = "?";
     uv_ip4_name(&addr, host, sizeof(host));
-    client->name =
-        std::string(host) + ":" + std::to_string(ntohs(addr.sin_port));
+    int port = ntohs(addr.sin_port);
+    client->id = G.connection_count++;
+    client->name = std::string(host) + ":" + std::to_string(port);
   }
   CLOG(client, "connected!");
   r = uv_read_start((uv_stream_t *)handle,
@@ -604,6 +605,17 @@ static void send_display_update() {
   update->score = G.score;
   update->play_count = G.play_count;
   update->hull_integrity = hull_integrity();
+  int num_panels = 0;
+  for (const auto* handle : G.handles) {
+    Client* client = CLIENT(handle);
+    update->panel_id[num_panels] = client->id;
+    update->panel_state[num_panels] = client->panel.state;
+    num_panels++;
+    if (num_panels == PANEL_DISPLAY_SLOTS) {
+      break;
+    }
+  }
+  update->num_panels = num_panels;
   uv_buf_t buf = uv_buf_init((char *)update, sizeof(DisplayUpdate));
   req->data = (void *)buf.base;
   int r = uv_write(req, (uv_stream_t *)&display, &buf, 1,
