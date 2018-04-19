@@ -51,19 +51,12 @@ static const char *const STARSHIP_NAMES[] = {
     "Orion",     "Prometheus",  "Serenity",     "Titan",    "USS Budget",
     "Valkyrie",  "Yamato"};
 
-#define RGB(r, g, b) {(r) / 255.f, (g) / 255.f, (b) / 255.f, 1.f}
+#define RGB(r, g, b) \
+  { (r) / 255.f, (g) / 255.f, (b) / 255.f, 1.f }
 static const GLfloat colors[][4] = {
-    RGB(249, 168, 37),
-    RGB(229, 28, 35),
-    RGB(216, 27, 96),
-    RGB(142, 36, 170),
-    RGB(57, 73, 171),
-    RGB(3, 155, 229),
-    RGB(0, 137, 123),
-    RGB(10, 143, 8),
-    RGB(192, 202, 51),
-    RGB(255, 179, 0),
-    RGB(244, 81, 30),
+    RGB(249, 168, 37), RGB(229, 28, 35), RGB(216, 27, 96), RGB(142, 36, 170),
+    RGB(57, 73, 171),  RGB(3, 155, 229), RGB(0, 137, 123), RGB(10, 143, 8),
+    RGB(192, 202, 51), RGB(255, 179, 0), RGB(244, 81, 30),
 };
 
 struct PushBuffer {
@@ -547,7 +540,8 @@ static void push_text(GLfloat x0, GLfloat y0, const GLfloat color[4],
 #undef PUSH_VERTEX
 }
 
-static void push_hud_object(float x, float y, const HudObject &obj, float scale = 1.f) {
+static void push_hud_object(float x, float y, const HudObject &obj,
+                            float scale = 1.f) {
   PushBuffer *b = &G.hud.push_buffer;
   float x0 = x;
   float y0 = y;
@@ -763,9 +757,11 @@ static void layout_high_scores() {
     const char *name =
         STARSHIP_NAMES[high_score.game_number % ARRAYSIZE(STARSHIP_NAMES)];
     int score = std::min(high_score.score, 999999);
-    push_text(padding, y, colors[color % ARRAYSIZE(colors)], name, SCALE /* scale */);
-    push_text(G.screen_width - score_width - padding, y, colors[color % ARRAYSIZE(colors)],
-              std::to_string(score).c_str(), SCALE /* scale */);
+    push_text(padding, y, colors[color % ARRAYSIZE(colors)], name,
+              SCALE /* scale */);
+    push_text(G.screen_width - score_width - padding, y,
+              colors[color % ARRAYSIZE(colors)], std::to_string(score).c_str(),
+              SCALE /* scale */);
     y += SCALE * lineheight + 1;
     color++;
   }
@@ -776,7 +772,8 @@ static void push_panel_state() {
   float scale = 1.0f;
   float panel_width = GRAY_PANEL.width;
   float fill_width = padding + (panel_width + padding) * D.num_panels;
-  float gap = D.num_panels == 1 ? 0 : (G.screen_width - fill_width) / (D.num_panels - 1);
+  float gap = D.num_panels == 1 ? 0 : (G.screen_width - fill_width) /
+                                          (D.num_panels - 1);
   if (fill_width > G.screen_width) {
     fill_width = G.screen_width - padding - padding * D.num_panels;
     panel_width = fill_width / D.num_panels;
@@ -797,8 +794,100 @@ static void push_panel_state() {
   }
 }
 
+static void push_countdown(int target_tick) {
+  if (target_tick > 0) {
+    float seconds_left =
+        ceil(((target_tick - D.now) * GAME_TICK_MSEC) / 1000.0);
+    if (seconds_left > 0) {
+      std::string countdown = std::to_string((int)seconds_left);
+      float width;
+      float height;
+      measure_text(countdown.c_str(), &width, &height);
+      float scale = 2.0;
+      width *= scale;
+      push_text(G.screen_width / 2 - width / 2, 3 * G.screen_height / 4,
+                colors[1], countdown.c_str(), scale);
+    }
+  }
+}
+
 static void layout_start_wait() {
   push_panel_state();
+
+  struct {
+    int color;
+    const char *text;
+  } message[] = {// spastic color cycling
+                 {1 + (int)(rand() % (ARRAYSIZE(colors) - 1)),
+                  STARSHIP_NAMES[D.play_count % ARRAYSIZE(STARSHIP_NAMES)]},
+                 {0, "boarding crew"},
+    };
+  float y = G.screen_height / 4;
+  for (const auto &line : message) {
+    float width;
+    float height;
+    measure_text(line.text, &width, &height);
+    push_text(G.screen_width / 2 - width / 2, y, colors[line.color], line.text);
+    y += height * 1.25;
+  }
+
+  push_countdown(D.start_at_tick);
+}
+
+static void layout_new_mission() {
+  push_panel_state();
+
+  char buf[32];
+  snprintf(buf, sizeof(buf), "- mission %03d -", D.mission % 1000);
+  float width;
+  float height;
+  measure_text(buf, &width, &height);
+  push_text(G.screen_width / 2 - width / 2, G.screen_height / 2 - height / 2,
+            colors[0], buf);
+}
+
+static void layout_playing() {
+  push_panel_state();
+
+  if (D.hull_integrity > 0 && D.hull_integrity <= (int)ARRAYSIZE(HULL_MAP)) {
+    if (D.hull_integrity > 1 || fmod(now, 1.25f) < 1.f) {
+      // flash if critical
+      push_hud_object(0, 0, HULL_MAP[D.hull_integrity - 1]);
+      push_hud_object(0, HULL_MAP[0].height + 8,
+                      HULL_MESSAGE[D.hull_integrity - 1]);
+    }
+  }
+
+  char buf[10];
+  snprintf(buf, sizeof(buf), "%d", D.score % 1000000);
+  float width;
+  float height;
+  float scale = 0.5;
+  measure_text(buf, &width, &height);
+  width *= scale;
+  height *= scale;
+  push_text(G.screen_width - width - 4, height, colors[5], buf, scale);
+}
+
+static void layout_end_wait() {
+  push_panel_state();
+
+  float width;
+  float height;
+  measure_text("need more crew", &width, &height);
+  push_text(G.screen_width / 2 - width / 2, G.screen_height / 2 - height / 2,
+            colors[0], "need more crew");
+
+  push_countdown(D.end_at_tick);
+}
+
+static void layout_game_over() {
+  float width;
+  float height;
+  measure_text("game over", &width, &height);
+  push_text(G.screen_width / 2 - width / 2, G.screen_height / 2 - height / 2,
+            colors[0], "game over");
+  // TODO do something cooler here
 }
 
 static void layout() {
@@ -816,18 +905,25 @@ static void layout() {
       layout_start_wait();
       break;
     }
-    case SETUP_NEW_MISSION:  // fallthrough
+    case SETUP_NEW_MISSION: {
+      push_panel_state();
+      break;
+    }
     case NEW_MISSION: {
+      layout_new_mission();
       break;
     }
     case PLAYING: {
+      layout_playing();
       break;
     }
     case END_WAIT: {
+      layout_end_wait();
       break;
     }
     case SETUP_GAME_OVER:  // fallthrough
     case GAME_OVER: {
+      layout_game_over();
       break;
     }
   }

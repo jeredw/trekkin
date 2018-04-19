@@ -606,8 +606,8 @@ static void send_display_update() {
   update->play_count = G.play_count;
   update->hull_integrity = hull_integrity();
   int num_panels = 0;
-  for (const auto* handle : G.handles) {
-    Client* client = CLIENT(handle);
+  for (const auto *handle : G.handles) {
+    Client *client = CLIENT(handle);
     update->panel_id[num_panels] = client->id;
     update->panel_state[num_panels] = client->panel.state;
     num_panels++;
@@ -616,6 +616,10 @@ static void send_display_update() {
     }
   }
   update->num_panels = num_panels;
+  update->start_at_tick = G.start_at_tick;
+  update->mission = G.mission;
+  update->mission_start_tick = G.mission_start_tick;
+  update->end_at_tick = G.end_at_tick;
   uv_buf_t buf = uv_buf_init((char *)update, sizeof(DisplayUpdate));
   req->data = (void *)buf.base;
   int r = uv_write(req, (uv_stream_t *)&display, &buf, 1,

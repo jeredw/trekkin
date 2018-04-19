@@ -155,7 +155,11 @@ struct DisplayUpdate {
   int score;
   int play_count;
   int hull_integrity;
-  int num_panels = 0;
+  int start_at_tick;
+  int end_at_tick;
+  int num_panels;
   int panel_id[PANEL_DISPLAY_SLOTS];
   PanelState panel_state[PANEL_DISPLAY_SLOTS];
+  int mission;
+  int mission_start_tick;
 };

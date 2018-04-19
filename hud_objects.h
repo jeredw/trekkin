@@ -26,20 +26,18 @@ struct HudObject {
 };
 
 static HudObject TITLE = HudObject(14, 133, 581, 264);
-static HudObject SHIP_100 = HudObject(23, 21, 134, 127);
-static HudObject SHIP_80 = HudObject(143, 21, 254, 127);
-static HudObject SHIP_60 = HudObject(262, 21, 373, 127);
-static HudObject SHIP_40 = HudObject(379, 21, 490, 127);
-static HudObject SHIP_20 = HudObject(495, 21, 606, 127);
+static HudObject HULL_MESSAGE[] = {
+    HudObject(495, 21, 606, 127), HudObject(379, 21, 490, 127),
+    HudObject(262, 21, 373, 127), HudObject(143, 21, 254, 127),
+    HudObject(23, 21, 134, 127),
+};
 static HudObject GRAY_PANEL = HudObject(21, 276, 156, 341);
 static HudObject ACTIVE_PANELS[] = {
-  HudObject(160, 276, 295, 341),
-  HudObject(21, 344, 156, 409),
-  HudObject(160, 344, 295, 409),
-  HudObject(21, 412, 156, 477),
+    HudObject(160, 276, 295, 341), HudObject(21, 344, 156, 409),
+    HudObject(160, 344, 295, 409), HudObject(21, 412, 156, 477),
 };
-static HudObject HULL_100 = HudObject(408, 272, 639, 309);
-static HudObject HULL_80 = HudObject(417, 312, 639, 349);
-static HudObject HULL_60 = HudObject(417, 353, 639, 390);
-static HudObject HULL_40 = HudObject(417, 393, 639, 430);
-static HudObject HULL_20 = HudObject(417, 433, 639, 470);
+static HudObject HULL_MAP[] = {
+    HudObject(417, 433, 639, 470), HudObject(417, 393, 639, 430),
+    HudObject(417, 353, 639, 390), HudObject(417, 312, 639, 349),
+    HudObject(408, 272, 639, 309),
+};
