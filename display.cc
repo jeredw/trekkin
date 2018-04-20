@@ -1,8 +1,10 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <cassert>
+#include <condition_variable>
 #include <sys/time.h>
 #include <sys/stat.h>
+#include <thread>
 #include <unistd.h>
 #include <fcntl.h>
 #include <errno.h>
@@ -72,6 +74,7 @@ struct GraphicsState {
   uint32_t screen_height;
   GLfloat projection_matrix[16];
 
+  DISPMANX_DISPLAY_HANDLE_T dispman_display;
   EGLDisplay display;
   EGLSurface surface;
   EGLContext context;
@@ -332,11 +335,10 @@ static void init_open_gl() {
   src_rect.width = G.screen_width << 16;
   src_rect.height = G.screen_height << 16;
 
-  DISPMANX_DISPLAY_HANDLE_T dispman_display =
-      vc_dispmanx_display_open(0 /* LCD */);
+  G.dispman_display = vc_dispmanx_display_open(0 /* LCD */);
   DISPMANX_UPDATE_HANDLE_T dispman_update = vc_dispmanx_update_start(0);
   DISPMANX_ELEMENT_HANDLE_T dispman_element = vc_dispmanx_element_add(
-      dispman_update, dispman_display, 0 /* layer */, &dst_rect, 0 /* src */,
+      dispman_update, G.dispman_display, 0 /* layer */, &dst_rect, 0 /* src */,
       &src_rect, DISPMANX_PROTECTION_NONE, 0 /* alpha */, 0 /* clamp */,
       DISPMANX_NO_ROTATE);
 
@@ -724,8 +726,6 @@ static void draw_frame() {
   draw_bg();
   draw_hud();
   draw_text();
-
-  eglSwapBuffers(G.display, G.surface);
 }
 
 static void layout_title_screen() {
@@ -928,6 +928,17 @@ static void layout() {
     }
   }
 }
+
+static struct {
+  std::mutex m;
+  std::condition_variable cv;
+} vsync_wait;
+
+static void vsync(DISPMANX_UPDATE_HANDLE_T u, void *data) {
+  std::unique_lock<std::mutex> lock(vsync_wait.m);
+  lock.unlock();
+  vsync_wait.cv.notify_one();
+}
 }
 
 int display_main() {
@@ -944,6 +955,8 @@ int display_main() {
 
   LOG("display started");
 
+  vc_dispmanx_vsync_callback(G.dispman_display, vsync, nullptr);
+
   while (1) {
     advance_time();
     read_display_update();
@@ -951,7 +964,11 @@ int display_main() {
     layout();
     submit_push_buffers();
     draw_frame();
-    sleep(0.01);
+    {
+      std::unique_lock<std::mutex> lock(vsync_wait.m);
+      vsync_wait.cv.wait(lock);
+    }
+    eglSwapBuffers(G.display, G.surface);
   }
   return 0;
 }
