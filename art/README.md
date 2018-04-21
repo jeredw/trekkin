@@ -1,0 +1,6 @@
+sfx attribution (creative commons)
+- [slowblip](https://freesound.org/people/CosmicD/sounds/37574)
+- [engine_start](https://freesound.org/people/JapanYoshiTheGamer/sounds/361250/)
+- [kablip](https://freesound.org/people/JarAxe/sounds/172695/)
+- [laser](https://freesound.org/people/Dpoggioli/sounds/196914/)
+- [whoosh](https://freesound.org/people/LittleRobotSoundFactory/sounds/274209/)
