@@ -3,7 +3,7 @@
 Trekkin' is a multiplayer game like [Spaceteam](http://spaceteam.ca) played
 with physical [control panels](https://github.com/igor47/spaceboard). This
 repository has a Raspberry Pi program to coordinate gameplay and drive a cool
-central display. It uses OpenGL ES2 for graphics and libuv for networking.
+central display. It uses OpenGL ES 2.0 for graphics and libuv for networking.
 
 # Usage
 
@@ -12,6 +12,7 @@ Build with `make` and run `trekkin` with desired options:
 * `-ip IPADDR` ip address server should listen on
 * `-port PORT` tcp port server should listen on
 * `-verbose` spew debug messages to stderr
+* `-sfx` play sound effects and music
 
 At present, ye cannae change the laws of physics.
 
@@ -23,6 +24,7 @@ At present, ye cannae change the laws of physics.
 - `/opt/vc/lib`: these ship with raspbian jessie.
 - `stb`: <3 [stb](https://github.com/nothings/stb). Using `stb_truetype.h`,
   `stb_image.h` in `stb`.
+- `SDL2`: `SDL_mixer` is used for audio.
 - Written for Raspberry Pi 3 which has a decent embedded GPU. Be sure the GPU
   has at least 128MB RAM and you are not using the experimental DRM driver. My
   `/boot/config.txt` has:
@@ -238,21 +240,30 @@ which corresponds to one of several ship names.
 
 ## Display
 
-The Raspberry Pi has a weird Broadcom GPU with its own compositing library and
-an OpenGL ES2 driver, so that's what we use.
+The Raspberry Pi has a weird Broadcom GPU with its own compositing library
+("dispman") and an OpenGL ES 2.0 driver, so that's what we use.
 
 The display program runs in a child process and reads updates from a pipe on
 its stdin. The updates are a small fixed size binary message that says what's
-going on, e.g. what mode the game is in and what the current score is.
+going on, e.g. what mode the game is in and what the current score is. Based on
+these messages, every frame, it lays out what to draw and then submits that to
+the GPU. Most of the time the program should be idle waiting for dispman to
+signal a vertical sync (e.g. at 60 Hz).
 
-TODO: Write more about this and use some of these catchlines
-There's Klingons on the starboard bow, Jim.
-It's life, Jim, but not as we know it.
-We come in peace -- shoot to kill, men.
+Note: While we're using SDL and its video library supports dispman, the
+raspbian package seems to only allow the X11 compositor. It's possible to get
+SDL to use dispman by building it manually, but to simplify things we just call
+dispman ourselves.
+
+## Sound effects and music
+
+If enabled, music and sound effects are played from the main process because
+that's the simplest place to do it. `SDL_mixer` has its own thread for mixing
+audio, which shouldn't block the event loop, and seems to use minimal CPU.
 
 # Links
 
 * Old [control server](https://github.com/wearhere/spacecontrol)
 * [libuv docs](http://docs.libuv.org/en/v1.x/index.html)
 * [OpenGL ES 2.0 quick reference](https://www.khronos.org/opengles/sdk/docs/reference_cards/OpenGL-ES-2_0-Reference-card.pdf) 
-* [Science fiction sound effects](https://www.zapsplat.com/sound-effect-category/misc-science-fiction/)
+* [SDL mixer docs](https://www.libsdl.org/projects/SDL_mixer/docs/SDL_mixer.html)

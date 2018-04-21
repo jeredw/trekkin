@@ -9,6 +9,7 @@
 #include <uv.h>
 #include "picojson/picojson.h"
 
+#include "audio.h"
 #include "game.h"
 #include "log.h"
 #include "misc.h"
@@ -29,6 +30,7 @@ const unsigned int ZOMBIE_SLAYER_MSEC = 10000;  // drop panels that don't ack
 static const char *server_ip = "0.0.0.0";
 static int server_port = 8000;
 static bool verbose = false;
+bool sfx = false;
 
 static Game G;             // global mc globalface
 static int now = 0;        // current tick of game loop
@@ -75,7 +77,7 @@ static const MissionTiming MISSION_TIMING[] = {
 };
 
 static void usage() {
-  fprintf(stderr, "Usage: trekkin [-ip IP] [-port PORT] [-verbose]\n");
+  fprintf(stderr, "Usage: trekkin [-ip IP] [-port PORT] [-verbose] [-sfx]\n");
 }
 
 static void parse_command_line(int argc, char **argv) {
@@ -89,6 +91,8 @@ static void parse_command_line(int argc, char **argv) {
       argc--;
     } else if (arg == "-verbose") {
       verbose = true;
+    } else if (arg == "-sfx") {
+      sfx = true;
     } else {
       fprintf(stderr, "unrecognized option: %s\n", argv[0]);
       usage();
@@ -407,6 +411,11 @@ static void update_current_commands() {
            CLIENT(command->shower)->name.c_str());
       G.bad_commands++;
       set_status(command->shower, CHOOSE(BAD_MESSAGES));
+      if (hull_integrity() == 1) {
+        play_sound(ALARM_SOUND);
+      } else {
+        play_sound(BAD_COMMAND_SOUND);
+      }
     } else {  // succeeded
       DLOG(CLIENT(command->doer), "command succeeded: %s %s [shower %s]",
            command->id.c_str(), command->desired_state.c_str(),
@@ -415,6 +424,7 @@ static void update_current_commands() {
       G.score += COMMAND_SCORE_PER_SEC * GAME_TICK_MSEC * ticks_left / 1000;
       G.good_commands++;
       set_status(command->shower, CHOOSE(GOOD_MESSAGES));
+      play_sound(GOOD_COMMAND_SOUND);
     }
     G.mission_command_count++;
     set_display(command->shower, "");
@@ -546,6 +556,7 @@ static void panel_state_machine(uv_handle_t *handle) {
         set_status(handle, "*** Ready! ***");
         set_display(handle, "");
         set_progress(handle, 100);
+        play_sound(JOIN_SOUND);
       } else if (command == G.commands.end() || now >= command->deadline_tick) {
         if (command != G.commands.end()) {
           G.commands.erase(command);
@@ -664,6 +675,7 @@ static void game(uv_timer_t *timer) {
       G.mission_start_tick = now + MISSION_INTRO_TICKS;
       G.mission_end_tick = G.mission_start_tick + MISSION_TIME_LIMIT_TICKS;
       G.mission_command_count = 0;
+      play_sound(START_MISSION_SOUND);
       GLOG("SETUP_NEW_MISSION -> NEW_MISSION");
       G.mode = NEW_MISSION;
       break;
@@ -728,6 +740,7 @@ static void game(uv_timer_t *timer) {
           set_progress(handle, 0);
         }
       }
+      play_sound(GAME_OVER_SOUND);
       GLOG("SETUP_GAME_OVER -> GAME_OVER");
       G.mode = GAME_OVER;
       // fallthrough
@@ -831,6 +844,10 @@ int main(int argc, char **argv) {
   start_keepalive_timer(&keepalive_timer, loop);
   start_game_timer(&game_timer, loop);
   start_display(&display_process, argv[0], loop);
+
+  init_audio();
+  atexit(cleanup_audio);
+  play_music();
 
   int r = uv_run(loop, UV_RUN_DEFAULT);
 

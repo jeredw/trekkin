@@ -1,7 +1,7 @@
 CC=g++
 #ASAN=-fsanitize=address
-CFLAGS=-std=c++11 -Wall -g $(ASAN) -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux 
-LDFLAGS=$(ASAN) -L/opt/vc/lib -lGLESv2 -lEGL -lopenmaxil -lbcm_host -L/usr/lib -luv -lstdc++
+CFLAGS=-std=c++11 -Wall -g $(ASAN) -I/opt/vc/include -I/opt/vc/include/interface/vcos/pthreads -I/opt/vc/include/interface/vmcs_host/linux `sdl2-config --cflags`
+LDFLAGS=$(ASAN) -L/opt/vc/lib -lGLESv2 -lEGL -lopenmaxil -lbcm_host -L/usr/lib -luv -lstdc++ `sdl2-config --libs` -lSDL2_mixer
 SRC := $(wildcard *.cc)
 OBJECTS := $(SRC:.cc=.o)
 
