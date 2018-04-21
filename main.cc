@@ -343,15 +343,6 @@ static void on_connection(uv_stream_t *server, int status) {
   }
 }
 
-static int clamp(int value, int min, int max) {
-  if (value < min) {
-    value = min;
-  } else if (value > max) {
-    value = max;
-  }
-  return value;
-}
-
 constexpr int percent_left(int elapsed, int total) {
   return 100 - (100 * elapsed / total);
 }
@@ -381,7 +372,7 @@ static void set_progress(uv_handle_t *handle, int percent) {
 }
 
 static MissionTiming mission_timing() {
-  int mission = clamp(G.mission, 1, 1 + ARRAYSIZE(MISSION_TIMING));
+  int mission = clamp(G.mission, 1, 1 + (int)ARRAYSIZE(MISSION_TIMING));
   return MISSION_TIMING[mission - 1];
 }
 

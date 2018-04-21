@@ -844,17 +844,42 @@ static void layout_new_mission() {
   measure_text(buf, &width, &height);
   push_text(G.screen_width / 2 - width / 2, G.screen_height / 2 - height / 2,
             colors[0], buf);
+
+  // show previous mission bonus
+  if (D.mission > 1) {
+    float width;
+    float height;
+    float scale = 0.75;
+    measure_text("999999", &width, &height);
+    width *= scale;
+    height *= scale;
+    char buf[32];
+    float t = (float)(D.mission_start_tick - D.now) / MISSION_INTRO_TICKS;
+    float bonus = (D.mission - 1) * MISSION_BONUS;
+    float counting_bonus = clamp(4.f * (1 - t), 0.f, 1.f) * bonus;
+    snprintf(buf, sizeof(buf), "%6d", (int)counting_bonus);
+    push_text(G.screen_width / 2 - width / 2,
+              3 * G.screen_height / 4 - height / 2, colors[5], buf, scale);
+  }
 }
 
 static void layout_playing() {
   push_panel_state();
 
+  const float padding = 8;
   if (D.hull_integrity > 0 && D.hull_integrity <= (int)ARRAYSIZE(HULL_MAP)) {
+    int index = D.hull_integrity - 1;
+    float map_width = HULL_MAP[index].width;
+    float y = 4;
+    push_hud_object(padding + map_width / 2 - HULL_LABEL[index].width / 2, y,
+                    HULL_LABEL[index]);
+    // flash if critical
     if (D.hull_integrity > 1 || fmod(now, 1.25f) < 1.f) {
-      // flash if critical
-      push_hud_object(0, 0, HULL_MAP[D.hull_integrity - 1]);
-      push_hud_object(0, HULL_MAP[0].height + 8,
-                      HULL_MESSAGE[D.hull_integrity - 1]);
+      y += HULL_LABEL[index].height + 8;
+      push_hud_object(padding, y, HULL_MAP[index]);
+      y += HULL_MAP[index].height + 8;
+      push_hud_object(padding + map_width / 2 - HULL_PERCENT[index].width / 2,
+                      y, HULL_PERCENT[index]);
     }
   }
 
@@ -862,11 +887,11 @@ static void layout_playing() {
   snprintf(buf, sizeof(buf), "%d", D.score % 1000000);
   float width;
   float height;
-  float scale = 0.5;
+  float scale = 0.75;
   measure_text(buf, &width, &height);
   width *= scale;
   height *= scale;
-  push_text(G.screen_width - width - 4, height, colors[5], buf, scale);
+  push_text(G.screen_width - width - padding, height, colors[5], buf, scale);
 }
 
 static void layout_end_wait() {

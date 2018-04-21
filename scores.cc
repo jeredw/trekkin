@@ -22,9 +22,9 @@ void add_high_score(HighScore new_score) {
   std::vector<HighScore> scores;
   get_high_scores(&scores);
   scores.push_back(new_score);
-  std::sort(scores.begin(), scores.end(),
-            [](const HighScore& a,
-               const HighScore& b) { return a.score >= b.score; });
+  std::stable_sort(scores.begin(), scores.end(),
+                   [](const HighScore& a,
+                      const HighScore& b) { return a.score >= b.score; });
 
   // so the display process doesn't see a partial score list
   char temp_file[] = "/tmp/trekXXXXXX";
