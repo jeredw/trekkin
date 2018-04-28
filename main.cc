@@ -385,7 +385,7 @@ static void remove_all_non_idle_commands() {
       [](const Command &command) { return !command.is_idle_command; });
 }
 
-static void remove_old_commands() {
+static void update_current_commands() {
   for (auto command = G.commands.begin(); command != G.commands.end();) {
     int progress = percent_left(now - command->started_tick,
                                 command->deadline_tick - command->started_tick);
@@ -623,12 +623,12 @@ static void send_display_update() {
     if (status < 0) {
       GLOG("display update failed: %s", uv_strerror(status));
     }
-    free(req->data);
+    delete (DisplayUpdate *)req->data;
     free(req);
   });
   if (r != 0) {
     GLOG("display update failed: %s", uv_strerror(r));
-    free(req->data);
+    delete (DisplayUpdate *)req->data;
     free(req);
   }
 }
@@ -697,7 +697,7 @@ static void game(uv_timer_t *timer) {
         G.mode = SETUP_NEW_MISSION;
         remove_all_non_idle_commands();
       } else {
-        remove_old_commands();
+        update_current_commands();
         assign_new_commands();
       }
       break;
@@ -707,7 +707,7 @@ static void game(uv_timer_t *timer) {
         GLOG("END_WAIT -> PLAYING");
         G.mode = PLAYING;
         G.mission_command_count = 0;
-        G.mission_end_tick = now + END_WAIT_TICKS;
+        G.mission_end_tick = now + MISSION_TIME_LIMIT_TICKS;
       } else if (now >= G.end_at_tick) {
         GLOG("END_WAIT -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
