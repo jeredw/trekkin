@@ -347,10 +347,6 @@ static void on_connection(uv_stream_t *server, int status) {
   }
 }
 
-constexpr int percent_left(int elapsed, int total) {
-  return 100 - (100 * elapsed / total);
-}
-
 static void set_display(uv_handle_t *handle, const std::string &text,
                         bool status = false) {
   picojson::object obj;
@@ -384,12 +380,12 @@ static int hull_integrity() {
   return clamp(5 + (G.good_commands / 3) - G.bad_commands, 0, 5);
 }
 
-static void clear_non_idle_commands() {
+static void remove_all_non_idle_commands() {
   remove_command_if(
       [](const Command &command) { return !command.is_idle_command; });
 }
 
-static void update_current_commands() {
+static void remove_old_commands() {
   for (auto command = G.commands.begin(); command != G.commands.end();) {
     int progress = percent_left(now - command->started_tick,
                                 command->deadline_tick - command->started_tick);
@@ -439,41 +435,39 @@ static std::vector<Command>::iterator assign_command(uv_handle_t *doer,
                                                      uv_handle_t *shower,
                                                      int dt) {
   const Panel &panel = PANEL(doer);
-  int eligible_actions = 0;
-  for (const auto &control : panel.controls) {
-    bool existing_command_for_control =
-        std::any_of(G.commands.begin(), G.commands.end(),
-                    [doer, control](const Command &command) {
-          return command.doer == doer && command.id == control.id;
-        });
-    if (!existing_command_for_control) {
-      for (const auto &action : control.actions) {
-        if (control.state != action.first /* state */) {
-          eligible_actions++;
+  // count actions, pick a random one to assign, then loop again to assign
+  int chosen_action = -1;
+  for (int do_assignment = 0; do_assignment <= 1; do_assignment++) {
+    int num_actions = 0;
+    for (const auto &control : panel.controls) {
+      bool control_already_has_command =
+          std::any_of(G.commands.begin(), G.commands.end(),
+                      [doer, control](const Command &command) {
+            return command.doer == doer && command.id == control.id;
+          });
+      if (!control_already_has_command) {
+        for (const auto &action : control.actions) {
+          if (control.state != action.first /* state */) {
+            if (do_assignment && num_actions == chosen_action) {
+              Command command;
+              command.id = control.id;
+              command.action = action.second;
+              command.desired_state = action.first;
+              command.started_tick = now;
+              command.deadline_tick = now + dt;
+              command.doer = doer;
+              command.shower = shower;
+              return G.commands.insert(G.commands.end(), command);
+            }
+            num_actions++;
+          }
         }
       }
     }
-  }
-  if (eligible_actions == 0) {
-    return G.commands.end();
-  }
-  int choice = rand() % eligible_actions;
-  int i = 0;
-  for (const auto &control : panel.controls) {
-    for (const auto &action : control.actions) {
-      if (i == choice) {
-        Command command;
-        command.id = control.id;
-        command.action = action.second;
-        command.desired_state = action.first;
-        command.started_tick = now;
-        command.deadline_tick = now + dt;
-        command.doer = doer;
-        command.shower = shower;
-        return G.commands.insert(G.commands.end(), command);
-      }
-      i++;
+    if (num_actions == 0) {
+      return G.commands.end();
     }
+    chosen_action = rand() % num_actions;
   }
   return G.commands.end();
 }
@@ -692,18 +686,18 @@ static void game(uv_timer_t *timer) {
         GLOG("PLAYING -> END_WAIT");
         G.mode = END_WAIT;
         G.end_at_tick = now + END_WAIT_TICKS;
-        clear_non_idle_commands();
+        remove_all_non_idle_commands();
       } else if (hull_integrity() == 0) {
         GLOG("PLAYING -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        clear_non_idle_commands();
+        remove_all_non_idle_commands();
       } else if (G.mission_command_count >= mission_timing().command_limit ||
                  now >= G.mission_end_tick) {
         GLOG("PLAYING -> SETUP_NEW_MISSION");
         G.mode = SETUP_NEW_MISSION;
-        clear_non_idle_commands();
+        remove_all_non_idle_commands();
       } else {
-        update_current_commands();
+        remove_old_commands();
         assign_new_commands();
       }
       break;

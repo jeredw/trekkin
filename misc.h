@@ -12,3 +12,7 @@ inline T clamp(T value, T min, T max) {
   }
   return value;
 }
+
+constexpr int percent_left(int elapsed, int total) {
+  return 100 - (100 * elapsed / total);
+}
