@@ -8,7 +8,8 @@ namespace trek {
 
 struct HighScore {
   HighScore() {}
-  HighScore(int g, std::string i, int s) : game_number(g), initials(i), score(s) {}
+  HighScore(int g, std::string i, int s)
+      : game_number(g), initials(i), score(s) {}
   int game_number = 0;
   std::string initials{"???"};
   int score = 0;

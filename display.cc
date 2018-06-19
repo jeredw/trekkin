@@ -761,8 +761,8 @@ static void layout_high_scores() {
       initials = "???";
     }
     int score = std::min(high_score.score, 999999);
-    push_text(score_padding, y, colors[color % ARRAYSIZE(colors)], initials.c_str(),
-              SCALE /* scale */);
+    push_text(score_padding, y, colors[color % ARRAYSIZE(colors)],
+              initials.c_str(), SCALE /* scale */);
     push_text(G.screen_width - score_width - score_padding, y,
               colors[color % ARRAYSIZE(colors)], std::to_string(score).c_str(),
               SCALE /* scale */);
@@ -915,12 +915,14 @@ static void layout_game_over() {
   float lineheight;
   measure_text("game over", &game_over_width, &lineheight);
   float y = G.screen_height / 2 - 4 * lineheight / 2;
-  push_text(G.screen_width / 2 - game_over_width / 2, y, colors[0], "game over");
+  push_text(G.screen_width / 2 - game_over_width / 2, y, colors[0],
+            "game over");
   y += 2 * lineheight;
 
   float enter_width;
   measure_text("enter initials", &enter_width, nullptr);
-  push_text(G.screen_width / 2 - enter_width / 2, y, colors[0], "enter initials");
+  push_text(G.screen_width / 2 - enter_width / 2, y, colors[0],
+            "enter initials");
   y += lineheight;
 
   float initials_width;

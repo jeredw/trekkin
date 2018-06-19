@@ -108,18 +108,18 @@ struct Client {
 };
 
 enum GamepadButtonMask {
-  X_BUTTON      = 0x0001,
-  A_BUTTON      = 0x0002,
-  B_BUTTON      = 0x0004,
-  Y_BUTTON      = 0x0008,
-  L_BUTTON      = 0x0010,
-  R_BUTTON      = 0x0020,
+  X_BUTTON = 0x0001,
+  A_BUTTON = 0x0002,
+  B_BUTTON = 0x0004,
+  Y_BUTTON = 0x0008,
+  L_BUTTON = 0x0010,
+  R_BUTTON = 0x0020,
   SELECT_BUTTON = 0x0040,
-  START_BUTTON  = 0x0080,
-  DPAD_LEFT     = 0x0100,
-  DPAD_RIGHT    = 0x0200,
-  DPAD_UP       = 0x0400,
-  DPAD_DOWN     = 0x0800,
+  START_BUTTON = 0x0080,
+  DPAD_LEFT = 0x0100,
+  DPAD_RIGHT = 0x0200,
+  DPAD_UP = 0x0400,
+  DPAD_DOWN = 0x0800,
 };
 
 struct Game {

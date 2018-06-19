@@ -88,7 +88,9 @@ static const MissionTiming MISSION_TIMING[] = {
 static uv_poll_t gamepad;
 
 static void usage() {
-  fprintf(stderr, "Usage: trekkin [-ip IP] [-port PORT] [-gamepad DEVICE] [-verbose] [-sfx]\n");
+  fprintf(stderr,
+          "Usage: trekkin [-ip IP] [-port PORT] [-gamepad DEVICE] [-verbose] "
+          "[-sfx]\n");
 }
 
 static void parse_command_line(int argc, char **argv) {
@@ -614,14 +616,22 @@ static void panel_state_machine(uv_handle_t *handle) {
 
 static GamepadButtonMask map_gamepad_button(int sys_button) {
   switch (sys_button) {
-    case 0: return X_BUTTON;
-    case 1: return A_BUTTON;
-    case 2: return B_BUTTON;
-    case 3: return Y_BUTTON;
-    case 4: return L_BUTTON;
-    case 5: return R_BUTTON;
-    case 8: return SELECT_BUTTON;
-    case 9: return START_BUTTON;
+    case 0:
+      return X_BUTTON;
+    case 1:
+      return A_BUTTON;
+    case 2:
+      return B_BUTTON;
+    case 3:
+      return Y_BUTTON;
+    case 4:
+      return L_BUTTON;
+    case 5:
+      return R_BUTTON;
+    case 8:
+      return SELECT_BUTTON;
+    case 9:
+      return START_BUTTON;
   }
   return (GamepadButtonMask)0;
 }
@@ -836,7 +846,9 @@ static void game(uv_timer_t *timer) {
         G.initials[G.cur_initial] = *letter;
       } else if (buttons & DPAD_DOWN) {
         const char *letter = strchr(INITIALS, G.initials[G.cur_initial]);
-        letter = (letter == nullptr || letter[0] == INITIALS[0]) ? INITIALS + strlen(INITIALS) - 1 : letter - 1;
+        letter = (letter == nullptr || letter[0] == INITIALS[0])
+                     ? INITIALS + strlen(INITIALS) - 1
+                     : letter - 1;
         G.initials[G.cur_initial] = *letter;
       } else if (G.gamepad_new_buttons & (DPAD_LEFT | B_BUTTON)) {
         if (G.cur_initial > 0) G.cur_initial--;

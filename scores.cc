@@ -13,7 +13,8 @@ void get_high_scores(std::vector<HighScore>* scores) {
   }
   HighScore next;
   char initials[4];
-  while (fscanf(fp, "%d %3s %d\n", &next.game_number, (char *)initials, &next.score) == 3) {
+  while (fscanf(fp, "%d %3s %d\n", &next.game_number, (char*)initials,
+                &next.score) == 3) {
     next.initials = std::string(initials);
     scores->push_back(next);
   }
@@ -41,7 +42,8 @@ void add_high_score(HighScore new_score) {
     return;
   }
   for (int i = 0; i < std::min((int)scores.size(), NUM_HIGH_SCORES); i++) {
-    fprintf(fp, "%d %3s %d\n", scores[i].game_number, scores[i].initials.c_str(), scores[i].score);
+    fprintf(fp, "%d %3s %d\n", scores[i].game_number,
+            scores[i].initials.c_str(), scores[i].score);
   }
   fsync(fd);
   fclose(fp);
