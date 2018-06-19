@@ -26,7 +26,7 @@ enum GameMode {
 const int GAME_TICK_MSEC = 100;
 constexpr int ms_to_ticks(int msec) { return msec / GAME_TICK_MSEC; }
 
-const int PANEL_IDLE_AFTER_TICKS = ms_to_ticks(90000);
+const int PANEL_IDLE_AFTER_TICKS = ms_to_ticks(120000);
 const int PANEL_IDLE_COMMAND_TIMEOUT_TICKS = ms_to_ticks(15000);
 const int PANEL_READY_MESSAGE_TICKS = ms_to_ticks(5000);
 
@@ -107,6 +107,21 @@ struct Client {
   Panel panel;
 };
 
+enum GamepadButtonMask {
+  X_BUTTON      = 0x0001,
+  A_BUTTON      = 0x0002,
+  B_BUTTON      = 0x0004,
+  Y_BUTTON      = 0x0008,
+  L_BUTTON      = 0x0010,
+  R_BUTTON      = 0x0020,
+  SELECT_BUTTON = 0x0040,
+  START_BUTTON  = 0x0080,
+  DPAD_LEFT     = 0x0100,
+  DPAD_RIGHT    = 0x0200,
+  DPAD_UP       = 0x0400,
+  DPAD_DOWN     = 0x0800,
+};
+
 struct Game {
   Game()
       : mode(ATTRACT),
@@ -143,6 +158,13 @@ struct Game {
   int connection_count;
   int play_count;
 
+  std::string initials;
+  int cur_initial;
+
+  int gamepad_buttons;
+  int gamepad_new_buttons;
+  bool gamepad_present;
+
   std::vector<Command> commands;
   std::vector<uv_handle_t *> handles;
 };
@@ -162,4 +184,6 @@ struct DisplayUpdate {
   PanelState panel_state[PANEL_DISPLAY_SLOTS];
   int mission;
   int mission_start_tick;
+  char initials[4];
+  int cur_initial;
 };

@@ -12,6 +12,7 @@ Build with `make` and run `trekkin` with desired options:
 * `-ip IPADDR` ip address server should listen on
 * `-port PORT` tcp port server should listen on
 * `-verbose` spew debug messages to stderr
+* `-gamepad DEVICE` path to gamepad device file
 * `-sfx` play sound effects and music
 
 At present, ye cannae change the laws of physics.
@@ -234,9 +235,10 @@ between 0 and 100. This is used to count down the time remaining for commands.
 
 ## High scores
 
-High scores are stored in a text file `high_scores.txt`. Because there is no
-way to enter in a team name, scores are just keyed on the current play count,
-which corresponds to one of several ship names.
+The game stores the top ten high scores in a text file `high_scores.txt` in
+decreasing order by score. The file has one score record per line. Records are
+in plain text with fields separated by spaces. The fields are: play number
+(since startup), player initials, score.
 
 ## Display
 
@@ -261,9 +263,18 @@ If enabled, music and sound effects are played from the main process because
 that's the simplest place to do it. `SDL_mixer` has its own thread for mixing
 audio, which shouldn't block the event loop, and seems to use minimal CPU.
 
+## Gamepad
+
+Players can enter their initials on the game over screen using an attached
+gamepad. The main program uses libuv to poll the gamepad using the Linux
+joystick API. If a gamepad is not present or is disconnected, the program
+periodically tries to reconnect - so gamepads can be hotswapped in case one
+breaks.
+
 # Links
 
 * Old [control server](https://github.com/wearhere/spacecontrol)
 * [libuv docs](http://docs.libuv.org/en/v1.x/index.html)
 * [OpenGL ES 2.0 quick reference](https://www.khronos.org/opengles/sdk/docs/reference_cards/OpenGL-ES-2_0-Reference-card.pdf) 
+* [Linux Joystick API](https://www.kernel.org/doc/Documentation/input/joystick-api.txt)
 * [SDL mixer docs](https://www.libsdl.org/projects/SDL_mixer/docs/SDL_mixer.html)

@@ -1,15 +1,17 @@
 #pragma once
 
 #include <vector>
+#include <string>
 #include <algorithm>
 
 namespace trek {
 
 struct HighScore {
-  HighScore() : game_number(0), score(0) {}
-  HighScore(int g, int s) : game_number(g), score(s) {}
-  int game_number;
-  int score;
+  HighScore() {}
+  HighScore(int g, std::string i, int s) : game_number(g), initials(i), score(s) {}
+  int game_number = 0;
+  std::string initials{"???"};
+  int score = 0;
 };
 
 const char *const HIGH_SCORES_FILE = "high_scores.txt";

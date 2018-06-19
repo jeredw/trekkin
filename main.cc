@@ -1,9 +1,14 @@
+#include <fcntl.h>
 #include <inttypes.h>
+#include <linux/joystick.h>
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
 #include <string>
 #include <sys/socket.h>
+#include <sys/stat.h>
+#include <sys/types.h>
+#include <unistd.h>
 #include <algorithm>
 
 #include <uv.h>
@@ -30,6 +35,7 @@ const unsigned int ZOMBIE_SLAYER_MSEC = 10000;  // drop panels that don't ack
 static const char *server_ip = "0.0.0.0";
 static int server_port = 8000;
 static bool verbose = false;
+static const char *gamepad_device = "/dev/input/js0";
 bool sfx = false;
 
 static Game G;             // global mc globalface
@@ -61,6 +67,9 @@ static const char *const BAD_MESSAGES[] = {
     "phooey!",
 };
 
+// set of valid characters for player initials
+static const char *const INITIALS = "?ABCDEFGHIJKLMNOPQRSTUVWXYZ";
+
 struct MissionTiming {
   int timeout;
   int rest;
@@ -76,8 +85,10 @@ static const MissionTiming MISSION_TIMING[] = {
     {ms_to_ticks(5000), ms_to_ticks(0), 30},
 };
 
+static uv_poll_t gamepad;
+
 static void usage() {
-  fprintf(stderr, "Usage: trekkin [-ip IP] [-port PORT] [-verbose] [-sfx]\n");
+  fprintf(stderr, "Usage: trekkin [-ip IP] [-port PORT] [-gamepad DEVICE] [-verbose] [-sfx]\n");
 }
 
 static void parse_command_line(int argc, char **argv) {
@@ -93,6 +104,9 @@ static void parse_command_line(int argc, char **argv) {
       verbose = true;
     } else if (arg == "-sfx") {
       sfx = true;
+    } else if (arg == "-gamepad" && argc > 1) {
+      gamepad_device = *++argv;
+      argc--;
     } else {
       fprintf(stderr, "unrecognized option: %s\n", argv[0]);
       usage();
@@ -282,11 +296,16 @@ static void for_each_client(client_visitor visit) {
           (void *)visit);
 }
 
+static void start_polling_gamepad(uv_loop_t *loop);
+
 static void keepalive(uv_timer_t *timer) {
   for_each_client([](uv_handle_t *handle) {
     send_message((uv_stream_t *)handle, "{\"message\": \"keep-alive\"}",
                  true /* really_spammy */);
   });
+  if (!G.gamepad_present) {
+    start_polling_gamepad(uv_default_loop());
+  }
 }
 
 static void on_connection(uv_stream_t *server, int status) {
@@ -593,6 +612,69 @@ static void panel_state_machine(uv_handle_t *handle) {
   }
 }
 
+static GamepadButtonMask map_gamepad_button(int sys_button) {
+  switch (sys_button) {
+    case 0: return X_BUTTON;
+    case 1: return A_BUTTON;
+    case 2: return B_BUTTON;
+    case 3: return Y_BUTTON;
+    case 4: return L_BUTTON;
+    case 5: return R_BUTTON;
+    case 8: return SELECT_BUTTON;
+    case 9: return START_BUTTON;
+  }
+  return (GamepadButtonMask)0;
+}
+
+static void read_gamepad(uv_poll_t *poll, int status, int events) {
+  uv_os_fd_t fd;
+  int r = uv_fileno((uv_handle_t *)poll, &fd);
+  if (r != 0) {
+    goto error;
+  }
+  js_event e;
+  while (read(fd, &e, sizeof(e)) > 0) {
+    if (e.type & JS_EVENT_AXIS) {
+      if (e.number == 0) {
+        if (e.value < 0) {
+          G.gamepad_buttons |= DPAD_LEFT;
+        } else if (e.value > 0) {
+          G.gamepad_buttons |= DPAD_RIGHT;
+        } else {  // e.value == 0
+          G.gamepad_buttons &= ~(DPAD_LEFT | DPAD_RIGHT);
+        }
+      } else if (e.number == 1) {
+        if (e.value < 0) {
+          G.gamepad_buttons |= DPAD_UP;
+        } else if (e.value > 0) {
+          G.gamepad_buttons |= DPAD_DOWN;
+        } else {  // e.value == 0
+          G.gamepad_buttons &= ~(DPAD_UP | DPAD_DOWN);
+        }
+      }
+    } else if (e.type & JS_EVENT_BUTTON) {
+      int button_mask = map_gamepad_button(e.number);
+      if (e.value) {
+        G.gamepad_buttons |= button_mask;
+      } else {
+        G.gamepad_buttons &= ~button_mask;
+      }
+    }
+  }
+  G.gamepad_new_buttons |= G.gamepad_buttons;
+  if (errno == EAGAIN) {
+    return;
+  }
+  GLOG("read_gamepad: %s", strerror(errno));
+
+error:
+  G.gamepad_buttons = 0;
+  G.gamepad_new_buttons = 0;
+  G.gamepad_present = false;
+  uv_poll_stop(poll);
+  uv_close((uv_handle_t *)poll, nullptr);
+}
+
 static void send_display_update() {
   uv_write_t *req = (uv_write_t *)malloc(sizeof(uv_write_t));
   DisplayUpdate *update = new DisplayUpdate;
@@ -616,6 +698,11 @@ static void send_display_update() {
   update->mission = G.mission;
   update->mission_start_tick = G.mission_start_tick;
   update->end_at_tick = G.end_at_tick;
+  for (int i = 0; i < 3 && i < (int)G.initials.size(); i++) {
+    update->initials[i] = G.initials[i];
+  }
+  update->initials[3] = 0;
+  update->cur_initial = G.cur_initial;
   uv_buf_t buf = uv_buf_init((char *)update, sizeof(DisplayUpdate));
   req->data = (void *)buf.base;
   int r = uv_write(req, (uv_stream_t *)&display, &buf, 1,
@@ -715,9 +802,6 @@ static void game(uv_timer_t *timer) {
       break;
     }
     case SETUP_GAME_OVER: {
-      add_high_score(HighScore(G.play_count, G.score));
-      G.play_count++;
-      G.score = 0;
       G.mission = 0;
       G.mission_start_tick = 0;
       G.mission_end_tick = 0;
@@ -726,6 +810,8 @@ static void game(uv_timer_t *timer) {
       G.end_at_tick = now + GAME_OVER_TICKS;
       G.bad_commands = 0;
       G.good_commands = 0;
+      G.initials = "???";
+      G.cur_initial = 0;
       for (auto handle : G.handles) {
         if (PANEL(handle).state == PANEL_READY ||
             PANEL(handle).state == PANEL_ACTIVE) {
@@ -740,7 +826,33 @@ static void game(uv_timer_t *timer) {
       // fallthrough
     }
     case GAME_OVER: {
+      int buttons = G.gamepad_buttons | G.gamepad_new_buttons;
+      if (buttons) {
+        G.end_at_tick = now + G.end_at_tick;
+      }
+      if (buttons & DPAD_UP) {
+        const char *letter = strchr(INITIALS, G.initials[G.cur_initial]);
+        letter = (letter == nullptr || letter[1] == 0) ? INITIALS : letter + 1;
+        G.initials[G.cur_initial] = *letter;
+      } else if (buttons & DPAD_DOWN) {
+        const char *letter = strchr(INITIALS, G.initials[G.cur_initial]);
+        letter = (letter == nullptr || letter[0] == INITIALS[0]) ? INITIALS + strlen(INITIALS) - 1 : letter - 1;
+        G.initials[G.cur_initial] = *letter;
+      } else if (G.gamepad_new_buttons & (DPAD_LEFT | B_BUTTON)) {
+        if (G.cur_initial > 0) G.cur_initial--;
+      } else if (G.gamepad_new_buttons & (DPAD_RIGHT | A_BUTTON)) {
+        if (G.cur_initial < 2) {
+          G.cur_initial++;
+        } else if (buttons & A_BUTTON) {
+          G.end_at_tick = now;
+        }
+      } else if (G.gamepad_new_buttons & START_BUTTON) {
+        G.end_at_tick = now;
+      }
       if (now >= G.end_at_tick) {
+        add_high_score(HighScore(G.play_count, G.initials, G.score));
+        G.play_count++;
+        G.score = 0;
         GLOG("GAME_OVER -> RESET_GAME");
         G.mode = RESET_GAME;
       }
@@ -758,6 +870,7 @@ static void game(uv_timer_t *timer) {
       break;
     }
   }
+  G.gamepad_new_buttons = 0;
   send_display_update();
   now++;
 }
@@ -778,6 +891,26 @@ static void start_server(uv_tcp_t *server, uv_loop_t *loop) {
   must(uv_ip4_addr(server_ip, server_port, &addr), "address");
   must(uv_tcp_bind(server, (const struct sockaddr *)&addr, 0), "bind");
   must(uv_listen((uv_stream_t *)server, 128, on_connection), "listen");
+}
+
+static void start_polling_gamepad(uv_loop_t *loop) {
+  int fd = open(gamepad_device, O_RDONLY | O_NONBLOCK);
+  if (fd == -1) {
+    GLOG("couldn't open gamepad: %s", strerror(errno));
+    return;
+  }
+  int r = uv_poll_init(loop, &gamepad, fd);
+  if (r != 0) {
+    GLOG("poll_init: %s", uv_strerror(r));
+    return;
+  }
+  r = uv_poll_start(&gamepad, UV_READABLE, read_gamepad);
+  if (r != 0) {
+    GLOG("poll_start: %s", uv_strerror(r));
+    return;
+  }
+  G.gamepad_present = true;
+  GLOG("gamepad connected");
 }
 
 static void start_keepalive_timer(uv_timer_t *timer, uv_loop_t *loop) {
@@ -837,6 +970,7 @@ int main(int argc, char **argv) {
   start_server(&server, loop);
   start_keepalive_timer(&keepalive_timer, loop);
   start_game_timer(&game_timer, loop);
+  start_polling_gamepad(loop);
   start_display(&display_process, argv[0], loop);
 
   init_audio();

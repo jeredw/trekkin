@@ -736,30 +736,34 @@ static void layout_title_screen() {
 
 static void layout_high_scores() {
   const float SCALE = 0.6;
-  float starship_width;
-  measure_text("Conquistador", &starship_width, nullptr);
-  starship_width *= SCALE;
+  float initials_width;
+  measure_text("MMMM", &initials_width, nullptr);
+  initials_width *= SCALE;
   float score_width;
   measure_text("999999", &score_width, nullptr);
   score_width *= SCALE;
-  float padding = (G.screen_width - score_width - starship_width) / 2;
+  float score_padding = (G.screen_width - score_width - initials_width) / 2;
 
   float lineheight;
-  measure_text("High scores", nullptr, &lineheight);
+  float title_width;
+  measure_text("Leaderboard", &title_width, &lineheight);
   float y = lineheight * 1.5;
-  push_text(padding, y, colors[0], "Leaderboard");
+  float title_x = (G.screen_width - title_width) / 2;
+  push_text(title_x, y, colors[0], "Leaderboard");
   y += 1.5 * lineheight;
 
   int color = 1;
   std::vector<HighScore> scores;
   get_high_scores(&scores);
   for (const auto &high_score : scores) {
-    const char *name =
-        STARSHIP_NAMES[high_score.game_number % ARRAYSIZE(STARSHIP_NAMES)];
+    std::string initials = high_score.initials.substr(0, 3);
+    if (initials.empty()) {
+      initials = "???";
+    }
     int score = std::min(high_score.score, 999999);
-    push_text(padding, y, colors[color % ARRAYSIZE(colors)], name,
+    push_text(score_padding, y, colors[color % ARRAYSIZE(colors)], initials.c_str(),
               SCALE /* scale */);
-    push_text(G.screen_width - score_width - padding, y,
+    push_text(G.screen_width - score_width - score_padding, y,
               colors[color % ARRAYSIZE(colors)], std::to_string(score).c_str(),
               SCALE /* scale */);
     y += SCALE * lineheight + 1;
@@ -907,12 +911,33 @@ static void layout_end_wait() {
 }
 
 static void layout_game_over() {
-  float width;
-  float height;
-  measure_text("game over", &width, &height);
-  push_text(G.screen_width / 2 - width / 2, G.screen_height / 2 - height / 2,
-            colors[0], "game over");
-  // TODO do something cooler here
+  float game_over_width;
+  float lineheight;
+  measure_text("game over", &game_over_width, &lineheight);
+  float y = G.screen_height / 2 - 4 * lineheight / 2;
+  push_text(G.screen_width / 2 - game_over_width / 2, y, colors[0], "game over");
+  y += 2 * lineheight;
+
+  float enter_width;
+  measure_text("enter initials", &enter_width, nullptr);
+  push_text(G.screen_width / 2 - enter_width / 2, y, colors[0], "enter initials");
+  y += lineheight;
+
+  float initials_width;
+  measure_text("MMM", &initials_width, nullptr);
+  initials_width *= 1.1;  // kerning
+  float x = G.screen_width / 2 - initials_width / 2;
+  float step = initials_width / 3;
+  for (int i = 0; i < 3; i++) {
+    char cur_initial[2] = {D.initials[i], 0};
+    if (i == D.cur_initial) {
+      int color_index = 1 + (int)(rand() % (ARRAYSIZE(colors) - 1));
+      push_text(x, y, colors[color_index], cur_initial);
+    } else {
+      push_text(x, y, colors[0], cur_initial);
+    }
+    x += step;
+  }
 }
 
 static void layout() {
