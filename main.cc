@@ -401,9 +401,21 @@ static int hull_integrity() {
   return clamp(5 + (G.good_commands / 3) - G.bad_commands, 0, 5);
 }
 
-static void remove_all_non_idle_commands() {
+static void clear_non_idle_displays(const char *status_text) {
+  for (auto handle : G.handles) {
+    if (PANEL(handle).state == PANEL_READY ||
+        PANEL(handle).state == PANEL_ACTIVE) {
+      set_status(handle, status_text);
+      set_display(handle, "");
+      set_progress(handle, 0);
+    }
+  }
+}
+
+static void remove_all_non_idle_commands(const char *status_text) {
   remove_command_if(
       [](const Command &command) { return !command.is_idle_command; });
+  clear_non_idle_displays(status_text);
 }
 
 static void update_current_commands() {
@@ -783,16 +795,16 @@ static void game(uv_timer_t *timer) {
         GLOG("PLAYING -> END_WAIT");
         G.mode = END_WAIT;
         G.end_at_tick = now + END_WAIT_TICKS;
-        remove_all_non_idle_commands();
+        remove_all_non_idle_commands("*** Need crew ***");
       } else if (hull_integrity() == 0) {
         GLOG("PLAYING -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        remove_all_non_idle_commands();
+        remove_all_non_idle_commands("*** Game over ***");
       } else if (G.mission_command_count >= mission_timing().command_limit ||
                  now >= G.mission_end_tick) {
         GLOG("PLAYING -> SETUP_NEW_MISSION");
         G.mode = SETUP_NEW_MISSION;
-        remove_all_non_idle_commands();
+        remove_all_non_idle_commands("*** New mission ***");
       } else {
         update_current_commands();
         assign_new_commands();
@@ -805,9 +817,11 @@ static void game(uv_timer_t *timer) {
         G.mode = PLAYING;
         G.mission_command_count = 0;
         G.mission_end_tick = now + MISSION_TIME_LIMIT_TICKS;
+        clear_non_idle_displays("*** Game on ***");
       } else if (now >= G.end_at_tick) {
         GLOG("END_WAIT -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
+        clear_non_idle_displays("*** Game over ***");
       }
       break;
     }
@@ -822,14 +836,6 @@ static void game(uv_timer_t *timer) {
       G.good_commands = 0;
       G.initials = "???";
       G.cur_initial = 0;
-      for (auto handle : G.handles) {
-        if (PANEL(handle).state == PANEL_READY ||
-            PANEL(handle).state == PANEL_ACTIVE) {
-          set_status(handle, "*** Game over ***");
-          set_display(handle, "Thank you for playing!");
-          set_progress(handle, 0);
-        }
-      }
       play_sound(GAME_OVER_SOUND);
       GLOG("SETUP_GAME_OVER -> GAME_OVER");
       G.mode = GAME_OVER;
