@@ -1,6 +1,6 @@
 #pragma once
 
-const float ATLAS_WIDTH = 640;
+const float ATLAS_WIDTH = 1620;
 const float ATLAS_HEIGHT = 480;
 
 struct HudObject {
@@ -27,9 +27,9 @@ struct HudObject {
 
 static HudObject TITLE = HudObject(14, 133, 581, 264);
 static HudObject HULL_MAP[] = {
-    HudObject(495, 21, 606, 127), HudObject(379, 21, 490, 127),
-    HudObject(262, 21, 373, 127), HudObject(143, 21, 254, 127),
-    HudObject(23, 21, 134, 127),
+    HudObject(1301, 13, 1616, 200), HudObject(978, 207, 1293, 394),
+    HudObject(979, 13, 1294, 200),  HudObject(656, 207, 971, 394),
+    HudObject(656, 13, 971, 200),
 };
 static HudObject GRAY_PANEL = HudObject(21, 276, 156, 341);
 static HudObject ACTIVE_PANELS[] = {

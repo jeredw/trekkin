@@ -875,13 +875,13 @@ static void layout_playing() {
     int index = D.hull_integrity - 1;
     float map_width = HULL_MAP[index].width;
     float y = 4;
-    push_hud_object(padding + map_width / 2 - HULL_LABEL[index].width / 2, y,
-                    HULL_LABEL[index]);
+    push_hud_object(padding, y, HULL_MAP[index]);
+    y += HULL_MAP[index].height + 8;
     // flash if critical
     if (D.hull_integrity > 1 || fmod(now, 1.25f) < 1.f) {
+      push_hud_object(padding + map_width / 2 - HULL_LABEL[index].width / 2, y,
+                      HULL_LABEL[index]);
       y += HULL_LABEL[index].height + 8;
-      push_hud_object(padding, y, HULL_MAP[index]);
-      y += HULL_MAP[index].height + 8;
       push_hud_object(padding + map_width / 2 - HULL_PERCENT[index].width / 2,
                       y, HULL_PERCENT[index]);
     }
