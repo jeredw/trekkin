@@ -78,7 +78,7 @@ struct MissionTiming {
 
 static const MissionTiming MISSION_TIMING[] = {
     // timeout           rest                command limit
-    {ms_to_ticks(20000), ms_to_ticks(10000), 10},
+    {ms_to_ticks(20000), ms_to_ticks(5000), 10},
     {ms_to_ticks(20000), ms_to_ticks(5000), 15},
     {ms_to_ticks(15000), ms_to_ticks(5000), 20},
     {ms_to_ticks(10000), ms_to_ticks(0), 25},

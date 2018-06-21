@@ -109,7 +109,7 @@ that must pass before a panel can show a new command.
 
 | mission# | timeout | rest time  | commands |
 | -------- | ------- | ---------- | -------- |
-| 1        | 20 sec  | 10 sec     | 10       |
+| 1        | 20 sec  |  5 sec     | 10       |
 | 2        | 20 sec  |  5 sec     | 15       |
 | 3        | 15 sec  |  5 sec     | 20       |
 | 4        | 10 sec  |  0 sec     | 25       |
