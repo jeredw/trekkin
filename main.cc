@@ -392,13 +392,24 @@ static void set_progress(uv_handle_t *handle, int percent) {
                true /* really_spammy */);
 }
 
+static int hull_integrity() {
+  return clamp(5 + (G.good_commands / 3) - G.bad_commands, 0, 5);
+}
+
+static void set_integrity(uv_handle_t *handle) {
+  picojson::object obj;
+  obj["message"] = picojson::value("set-integrity");
+  picojson::object data;
+  double percent = (double)(100 * hull_integrity() / 5);
+  data["value"] = picojson::value(clamp(percent, 0.0, 100.0));
+  obj["data"] = picojson::value(data);
+  send_message((uv_stream_t *)handle, picojson::value(obj).serialize(),
+               true /* really_spammy */);
+}
+
 static MissionTiming mission_timing() {
   int mission = clamp(G.mission, 1, 1 + (int)ARRAYSIZE(MISSION_TIMING));
   return MISSION_TIMING[mission - 1];
-}
-
-static int hull_integrity() {
-  return clamp(5 + (G.good_commands / 3) - G.bad_commands, 0, 5);
 }
 
 static void clear_non_idle_displays(const char *status_text) {
@@ -412,6 +423,15 @@ static void clear_non_idle_displays(const char *status_text) {
   }
 }
 
+static void send_integrity_to_non_idle() {
+  for (auto handle : G.handles) {
+    if (PANEL(handle).state == PANEL_READY ||
+        PANEL(handle).state == PANEL_ACTIVE) {
+      set_integrity(handle);
+    }
+  }
+}
+
 static void remove_all_non_idle_commands(const char *status_text) {
   remove_command_if(
       [](const Command &command) { return !command.is_idle_command; });
@@ -419,6 +439,7 @@ static void remove_all_non_idle_commands(const char *status_text) {
 }
 
 static void update_current_commands() {
+  bool commands_changed = false;
   for (auto command = G.commands.begin(); command != G.commands.end();) {
     int progress = percent_left(now - command->started_tick,
                                 command->deadline_tick - command->started_tick);
@@ -455,12 +476,16 @@ static void update_current_commands() {
       set_status(command->shower, CHOOSE(GOOD_MESSAGES));
       play_sound(GOOD_COMMAND_SOUND);
     }
+    commands_changed = true;
     G.mission_command_count++;
     set_display(command->shower, "");
     set_progress(command->shower, 100);
     PANEL(command->shower).shown_command_removed_tick = now;
 
     command = G.commands.erase(command);
+  }
+  if (commands_changed) {
+    send_integrity_to_non_idle();
   }
 }
 
@@ -583,6 +608,7 @@ static void panel_state_machine(uv_handle_t *handle) {
         set_status(handle, "*** Ready! ***");
         set_display(handle, "");
         set_progress(handle, 100);
+        set_integrity(handle);
         play_sound(JOIN_SOUND);
       } else if (command == G.commands.end() || now >= command->deadline_tick) {
         if (command != G.commands.end()) {

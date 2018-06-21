@@ -233,6 +233,20 @@ about what's happening in the game to keep things interesting.
 Sets a progress bar located somewhere on a panel to an integer percentage
 between 0 and 100. This is used to count down the time remaining for commands.
 
+### Server->Client: `set-integrity`
+
+```json
+{
+   "message" : "set-integrity",
+   "data" : {
+      "value" : 20
+   }
+}
+```
+
+Informs panels of the current hull integrity as an integer percentage between 0
+and 100.
+
 ## High scores
 
 The game stores the top ten high scores in a text file `high_scores.txt` in
