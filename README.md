@@ -223,7 +223,7 @@ about what's happening in the game to keep things interesting.
 
 ```json
 {
-   "message" : "set-progess",
+   "message" : "set-progress",
    "data" : {
       "value" : 42
    }
