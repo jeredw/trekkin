@@ -1,7 +1,9 @@
+#!/usr/bin/env python
 import curses
 import time
 from curses import wrapper
 import random
+import signal
 import socket
 import sys
 
@@ -578,7 +580,9 @@ def main(stdscr):
     global progress
     global integrity
     status_timer = 0
-
+    signal.signal(signal.SIGTSTP, signal.SIG_IGN)
+    signal.signal(signal.SIGTTIN, signal.SIG_IGN)
+    signal.signal(signal.SIGTTOU, signal.SIG_IGN)
     stdscr.nodelay(True)
     curses.noecho()
     curses.cbreak()
@@ -594,66 +598,70 @@ def main(stdscr):
     except socket.timeout:
         sys.exit(1)
     while client.running():
-        while True:
-            inst = client.get_instruction()
-            if inst is None: break
-            if inst['type'] == 'display':
-                display = inst['message']
-                draw_display(stdscr)
-            elif inst['type'] == 'status':
-                status = inst['message']
-                status_timer = 100
-                draw_status(stdscr)
-            elif inst['type'] == 'progress':
-                progress = int(inst['message'])
-                draw_progress(stdscr)
-            elif inst['type'] == 'integrity':
-                integrity = int(inst['message'])
-                draw_integrity(stdscr)
-        start_state = {id: controls[id]["state"] for id in controls}
-        c = stdscr.getch()
-        if 0 <= c <= 255 and chr(c).lower() in keys:
-            control_name = keys[chr(c).lower()]
-            activate(control_name, chr(c))
-            redraw(control_name, stdscr)
-        if c == curses.KEY_UP: drive_snake(0, -1)
-        elif c == curses.KEY_DOWN: drive_snake(0, 1)
-        elif c == curses.KEY_LEFT: drive_snake(-1, 0)
-        elif c == curses.KEY_RIGHT: drive_snake(+1, 0)
-        for name in controls:
-            if "timer" in controls[name]:
-                if controls[name]["timer"] > 0:
-                    controls[name]["timer"] -= 1
-                    if controls[name]["timer"] == 0:
-                        if name == "modem":
-                            controls[name]["number"] = ""
-                        if name == "java":
-                            if controls[name]["state"] == "start1":
-                                controls[name]["state"] = "start2"
-                            elif controls[name]["state"] == "start2":
-                                controls[name]["state"] = "start3"
-                            elif controls[name]["state"] == "start3":
-                                controls[name]["state"] = "run"
-                            elif controls[name]["state"] == "run":
-                                controls[name]["state"] = "0"
-                            controls[name]["timer"] = 30
-                        else:
-                            controls[name]["state"] = controls[name]["off"]
-                        if name == "defrag":
-                            controls[name]["drive"] = fragments()
-                        redraw(name, stdscr)
-        if status_timer > 0:
-            status_timer -= 1
-            if status_timer == 0:
-                status = ""
-                draw_status(stdscr)
-        update_snake(stdscr)
-        stdscr.move(0,0)
-        end_state = {id: controls[id]["state"] for id in controls}
-        for id in controls:
-            if start_state[id] != end_state[id]:
-                client.update(id, end_state[id])
-        time.sleep(0.1)
+        try:
+            while True:
+                inst = client.get_instruction()
+                if inst is None: break
+                if inst['type'] == 'display':
+                    display = inst['message']
+                    draw_display(stdscr)
+                elif inst['type'] == 'status':
+                    status = inst['message']
+                    status_timer = 100
+                    draw_status(stdscr)
+                elif inst['type'] == 'progress':
+                    progress = int(inst['message'])
+                    draw_progress(stdscr)
+                elif inst['type'] == 'integrity':
+                    integrity = int(inst['message'])
+                    draw_integrity(stdscr)
+            start_state = {id: controls[id]["state"] for id in controls}
+            c = stdscr.getch()
+            if 0 <= c <= 255 and chr(c).lower() in keys:
+                control_name = keys[chr(c).lower()]
+                activate(control_name, chr(c))
+                redraw(control_name, stdscr)
+            if c == curses.KEY_UP: drive_snake(0, -1)
+            elif c == curses.KEY_DOWN: drive_snake(0, 1)
+            elif c == curses.KEY_LEFT: drive_snake(-1, 0)
+            elif c == curses.KEY_RIGHT: drive_snake(+1, 0)
+            for name in controls:
+                if "timer" in controls[name]:
+                    if controls[name]["timer"] > 0:
+                        controls[name]["timer"] -= 1
+                        if controls[name]["timer"] == 0:
+                            if name == "modem":
+                                controls[name]["number"] = ""
+                            if name == "java":
+                                if controls[name]["state"] == "start1":
+                                    controls[name]["state"] = "start2"
+                                elif controls[name]["state"] == "start2":
+                                    controls[name]["state"] = "start3"
+                                elif controls[name]["state"] == "start3":
+                                    controls[name]["state"] = "run"
+                                elif controls[name]["state"] == "run":
+                                    controls[name]["state"] = "0"
+                                controls[name]["timer"] = 30
+                            else:
+                                controls[name]["state"] = controls[name]["off"]
+                            if name == "defrag":
+                                controls[name]["drive"] = fragments()
+                            redraw(name, stdscr)
+            if status_timer > 0:
+                status_timer -= 1
+                if status_timer == 0:
+                    status = ""
+                    draw_status(stdscr)
+            update_snake(stdscr)
+            stdscr.move(0,0)
+            end_state = {id: controls[id]["state"] for id in controls}
+            for id in controls:
+                if start_state[id] != end_state[id]:
+                    client.update(id, end_state[id])
+            time.sleep(0.1)
+	except KeyboardInterrupt:
+	    stdscr.redrawwin()
+	    stdscr.refresh()
     client.stop()
 
 wrapper(main)
