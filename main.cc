@@ -493,39 +493,54 @@ static std::vector<Command>::iterator assign_command(uv_handle_t *doer,
                                                      uv_handle_t *shower,
                                                      int dt) {
   const Panel &panel = PANEL(doer);
-  // count actions, pick a random one to assign, then loop again to assign
-  int chosen_action = -1;
+  // pick a random control with eligible actions, then pick a random action for
+  // that control
+  int chosen_control = -1;
   for (int do_assignment = 0; do_assignment <= 1; do_assignment++) {
-    int num_actions = 0;
+    int num_controls = 0;
     for (const auto &control : panel.controls) {
       bool control_already_has_command =
           std::any_of(G.commands.begin(), G.commands.end(),
                       [doer, control](const Command &command) {
             return command.doer == doer && command.id == control.id;
           });
-      if (!control_already_has_command) {
-        for (const auto &action : control.actions) {
-          if (control.state != action.first /* state */) {
-            if (do_assignment && num_actions == chosen_action) {
-              Command command;
-              command.id = control.id;
-              command.action = action.second;
-              command.desired_state = action.first;
-              command.started_tick = now;
-              command.deadline_tick = now + dt;
-              command.doer = doer;
-              command.shower = shower;
-              return G.commands.insert(G.commands.end(), command);
-            }
-            num_actions++;
-          }
+      if (control_already_has_command) {
+        continue;
+      }
+      int num_actions = 0;
+      for (const auto &action : control.actions) {
+        if (control.state != action.first /* state */) {
+          num_actions++;
         }
       }
+      if (num_actions > 0) {
+        if (do_assignment && num_controls == chosen_control) {
+          int actions_to_skip = rand() % num_actions;
+          for (const auto &action : control.actions) {
+            if (control.state != action.first /* state */) {
+              if (actions_to_skip == 0) {
+                Command command;
+                command.id = control.id;
+                command.action = action.second;
+                command.desired_state = action.first;
+                command.started_tick = now;
+                command.deadline_tick = now + dt;
+                command.doer = doer;
+                command.shower = shower;
+                return G.commands.insert(G.commands.end(), command);
+              }
+              actions_to_skip--;
+            }
+          }
+          return G.commands.end();
+        }
+        num_controls++;
+      }
     }
-    if (num_actions == 0) {
+    if (num_controls == 0) {
       return G.commands.end();
     }
-    chosen_action = rand() % num_actions;
+    chosen_control = rand() % num_controls;
   }
   return G.commands.end();
 }

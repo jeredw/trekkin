@@ -179,7 +179,7 @@ controls = {
         "timer": 0,
     }
 }
-progress = 50
+progress = 0
 integrity = 100
 status = ""
 display = ""
@@ -231,15 +231,15 @@ def activate(name, key):
 
 def draw_power(s):
     s.addstr(4, 2, "(P)ower")
-    s.addstr(5, 3, " more")
-    s.addstr(6, 3, " less")
+    s.addstr(5, 3, " less")
+    s.addstr(6, 3, " more")
     s.addch(5 if controls["power"]["state"] == 'less' else 6, 3, ">")
 
 def draw_turbo(s):
     s.addstr(4, 11, "(T)urbo")
-    s.addstr(5, 12, " 33 MHz")
-    s.addstr(6, 12, " 66 MHz")
-    s.addch(5 if controls["turbo"]["state"] == '33' else 6, 12, ">")
+    s.addstr(5, 12, " 16 MHz")
+    s.addstr(6, 12, " 33 MHz")
+    s.addch(5 if controls["turbo"]["state"] == '16' else 6, 12, ">")
 
 def draw_field(s):
     s.addstr(4, 20, "(F)ield")
