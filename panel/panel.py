@@ -2,6 +2,10 @@ import curses
 import time
 from curses import wrapper
 import random
+import socket
+import sys
+
+from client import Client
 
 fragments = lambda: [".x"[random.randint(0, 1)] for _ in range(26)]
 baud_rates = ["110", "300", "600", "1200", "2400", "4800", "9600", "14400", "19200", "38400", "57600"]
@@ -177,8 +181,8 @@ controls = {
 }
 progress = 50
 integrity = 100
-status = "*** Waiting for crew ***" 
-display = "Yo dawg I heard you like yo yos"
+status = ""
+display = ""
 snake_dx, snake_dy = 0,1
 snake_timer = 0
 snake = [(30, 13)]
@@ -470,7 +474,8 @@ def draw_modem(s):
         s.addstr(20, 42, "   L*I (0) L#I     ")
     s.addstr(21, 42, "  [ATDT{:7s}]    ".format(controls["modem"]["number"]))
 
-def draw_hull(s):
+def draw_integrity(s):
+    s.addstr(23, 68, "----------")
     s.addstr(23, 68, "Hull: {}%".format(integrity))
 
 def draw_progress(s):
@@ -495,7 +500,7 @@ def draw_controls(s):
     draw_status(s)
     draw_display(s)
     draw_progress(s)
-    draw_hull(s)
+    draw_integrity(s)
     draw_power(s)
     draw_turbo(s)
     draw_field(s)
@@ -568,13 +573,44 @@ keys = {
 
 def main(stdscr):
     global controls
+    global display
+    global status
+    global progress
+    global integrity
+    status_timer = 0
+
     stdscr.nodelay(True)
     curses.noecho()
     curses.cbreak()
     stdscr.keypad(True)
     draw_controls(stdscr)
     stdscr.move(0, 0)
-    while True:
+    client = Client('0.0.0.0')
+    try:
+        client.start({"controls": [{"id": id,
+                       "state": controls[id]["state"],
+                       "actions": controls[id]["actions"]}
+                      for id in controls]})
+    except socket.timeout:
+        sys.exit(1)
+    while client.running():
+        while True:
+            inst = client.get_instruction()
+            if inst is None: break
+            if inst['type'] == 'display':
+                display = inst['message']
+                draw_display(stdscr)
+            elif inst['type'] == 'status':
+                status = inst['message']
+                status_timer = 100
+                draw_status(stdscr)
+            elif inst['type'] == 'progress':
+                progress = int(inst['message'])
+                draw_progress(stdscr)
+            elif inst['type'] == 'integrity':
+                integrity = int(inst['message'])
+                draw_integrity(stdscr)
+        start_state = {id: controls[id]["state"] for id in controls}
         c = stdscr.getch()
         if 0 <= c <= 255 and chr(c).lower() in keys:
             control_name = keys[chr(c).lower()]
@@ -606,8 +642,18 @@ def main(stdscr):
                         if name == "defrag":
                             controls[name]["drive"] = fragments()
                         redraw(name, stdscr)
+        if status_timer > 0:
+            status_timer -= 1
+            if status_timer == 0:
+                status = ""
+                draw_status(stdscr)
         update_snake(stdscr)
         stdscr.move(0,0)
+        end_state = {id: controls[id]["state"] for id in controls}
+        for id in controls:
+            if start_state[id] != end_state[id]:
+                client.update(id, end_state[id])
         time.sleep(0.1)
+    client.stop()
 
 wrapper(main)
