@@ -85,6 +85,12 @@ static const MissionTiming MISSION_TIMING[] = {
     {ms_to_ticks(5000), ms_to_ticks(0), 30},
 };
 
+static const int KONAMI_CODE[] = {
+    DPAD_UP, 0, DPAD_UP, 0, DPAD_DOWN, 0, DPAD_DOWN, 0,
+    DPAD_LEFT, 0, DPAD_RIGHT, 0, DPAD_LEFT, 0, DPAD_RIGHT, 0,
+    B_BUTTON, 0, A_BUTTON, 0, START_BUTTON,
+};
+
 static uv_poll_t gamepad;
 
 static void usage() {
@@ -689,6 +695,27 @@ static GamepadButtonMask map_gamepad_button(int sys_button) {
   return (GamepadButtonMask)0;
 }
 
+static void check_konami_code() {
+  int next_code = KONAMI_CODE[G.konami_index];
+  if (next_code) {
+    if (G.gamepad_buttons) {
+      if (G.gamepad_buttons == next_code) {
+        G.konami_index++;
+      } else {
+        G.konami_index = 0;
+      }
+    }
+  } else {
+    if (!G.gamepad_buttons) {
+      G.konami_index++;
+    }
+  }
+  if (G.konami_index == ARRAYSIZE(KONAMI_CODE)) {
+    G.konami_index = 0;
+    G.konami_code = true;
+  }
+}
+
 static void read_gamepad(uv_poll_t *poll, int status, int events) {
   uv_os_fd_t fd;
   int r = uv_fileno((uv_handle_t *)poll, &fd);
@@ -724,6 +751,7 @@ static void read_gamepad(uv_poll_t *poll, int status, int events) {
       }
     }
   }
+  check_konami_code();
   G.gamepad_new_buttons |= G.gamepad_buttons;
   if (errno == EAGAIN) {
     return;
@@ -930,6 +958,10 @@ static void game(uv_timer_t *timer) {
     }
   }
   G.gamepad_new_buttons = 0;
+  if (G.konami_code) {
+    play_sound(CONTRA_SOUND);
+    G.konami_code = false;
+  }
   send_display_update();
   now++;
 }
