@@ -9,7 +9,7 @@ extern bool sfx;
 
 namespace trek {
 
-const char *const GROOVE_PATH = "art/groove.mp3";
+const char *const GROOVE_PATH = "art/nonfree.mp3";
 static Mix_Music *groove;
 static Mix_Chunk *sounds[NUM_SOUNDS];
 
