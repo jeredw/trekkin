@@ -1,11 +1,12 @@
 #!/usr/bin/env python
 import curses
-import time
 from curses import wrapper
+import math
 import random
 import signal
 import socket
 import sys
+import time
 
 from client import Client
 
@@ -573,6 +574,28 @@ keys = {
     '9': "modem",
 }
 
+def screensaver(s, client):
+    s.clear()
+    message = "I am a screensaver. Press any key to play."
+    t = 0
+    y = lambda i: 5 * math.sin(t*.1) * math.sin((5+i)*.1)
+    while client.running():
+        while True:
+            inst = client.get_instruction()
+            if inst is None: break
+        c = s.getch()
+        if c != -1:
+            draw_controls(s)
+            return
+        for i, c in enumerate(message):
+            s.addch(int(12 + y(i)), 20 + i, ' ')
+        t += 1
+        for i, c in enumerate(message):
+            s.addch(int(12 + y(i)), 20 + i, c)
+        if t % 200 == 0:
+            s.clear()  # sometimes the apple misses escapes
+        time.sleep(.1)
+
 def main(stdscr):
     global controls
     global display
@@ -597,6 +620,7 @@ def main(stdscr):
                       for id in controls]})
     except socket.timeout:
         sys.exit(1)
+    since_real_keypress = 0
     while client.running():
         try:
             while True:
@@ -615,8 +639,16 @@ def main(stdscr):
                 elif inst['type'] == 'integrity':
                     integrity = int(inst['message'])
                     draw_integrity(stdscr)
+            if "defrag" in status.lower() and status_timer % 3 == 0 and controls["defrag"]["state"] == "0":
+                activate('defrag', 'd')
+                redraw('defrag', stdscr)
             start_state = {id: controls[id]["state"] for id in controls}
             c = stdscr.getch()
+            if c != -1: since_real_keypress = 0
+            else: since_real_keypress += 1
+            if since_real_keypress > 10 * 60 * 10:
+                screensaver(stdscr, client)
+                since_real_keypress = 0
             if 0 <= c <= 255 and chr(c).lower() in keys:
                 control_name = keys[chr(c).lower()]
                 activate(control_name, chr(c))

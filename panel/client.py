@@ -33,6 +33,7 @@ class Client:
   def start(self, announce):
     self._socket.settimeout(5)
     self._socket.connect((self.host, self.port))
+    self._socket.settimeout(None)
     self._send('announce', announce)
 
     # start the reader thread
