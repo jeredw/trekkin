@@ -773,6 +773,40 @@ static void layout_high_scores() {
   }
 }
 
+static void layout_instructions() {
+  const float SCALE = 0.5;
+  float lineheight;
+  float title_width;
+  measure_text("how to play", &title_width, &lineheight);
+  float y = lineheight * 1.5;
+  float title_x = (G.screen_width - title_width) / 2;
+  push_text(title_x, y, colors[0], "how to play");
+  y += 1.5 * lineheight;
+  struct {
+    int color;
+    const char* const text;
+  } lines[] = {
+    2, "Gather 2 or more crew",
+    2, "... take up your stations",
+    2, "",
+    3, "Follow orders",
+    3, "... at your stations",
+    3, "",
+    5, "Relay orders when required",
+  };
+  for (int i = 0; i < (int)ARRAYSIZE(lines); i++) {
+    auto* line = lines[i].text;
+    if (strlen(line) != 0) {
+      push_text(20, y, colors[lines[i].color], line, SCALE /* scale */);
+    }
+    y += SCALE * lineheight + 1;
+  }
+  y = G.screen_height - SCALE * lineheight + 1;
+  float tag_width;
+  measure_text("Pray for a true peace in space", &tag_width, nullptr);
+  push_text(G.screen_width / 2 - 0.5 * SCALE * tag_width / 2, y, colors[4], "Pray for a true peace in space", 0.5 * SCALE /* scale */);
+}
+
 static void push_panel_state() {
   float padding = 8;
   float scale = 1.0f;
@@ -948,7 +982,9 @@ static void layout() {
   switch (D.mode) {
     case ATTRACT:  // fallthrough
     case RESET_GAME: {
-      if (fmod(now, 10) < 5) {
+      if (fmod(now, 40) >= 20 && fmod(now, 40) < 30) {
+        layout_instructions();
+      } else if (fmod(now, 10) < 5) {
         layout_title_screen();
       } else {
         layout_high_scores();
