@@ -85,6 +85,12 @@ static const MissionTiming MISSION_TIMING[] = {
     {ms_to_ticks(5000), ms_to_ticks(0), 30},
 };
 
+static const int KONAMI_CODE[] = {
+    DPAD_UP, 0, DPAD_UP, 0, DPAD_DOWN, 0, DPAD_DOWN, 0,
+    DPAD_LEFT, 0, DPAD_RIGHT, 0, DPAD_LEFT, 0, DPAD_RIGHT, 0,
+    B_BUTTON, 0, A_BUTTON, 0, START_BUTTON,
+};
+
 static uv_poll_t gamepad;
 
 static void usage() {
@@ -412,13 +418,13 @@ static MissionTiming mission_timing() {
   return MISSION_TIMING[mission - 1];
 }
 
-static void clear_non_idle_displays(const char *status_text) {
+static void clear_non_idle_displays(const char *status_text, const char *display_text) {
   for (auto handle : G.handles) {
     if (PANEL(handle).state == PANEL_READY ||
         PANEL(handle).state == PANEL_ACTIVE) {
       set_status(handle, status_text);
-      set_display(handle, "");
-      set_progress(handle, 0);
+      set_display(handle, display_text);
+      //set_progress(handle, 0);
     }
   }
 }
@@ -432,10 +438,10 @@ static void send_integrity_to_non_idle() {
   }
 }
 
-static void remove_all_non_idle_commands(const char *status_text) {
+static void remove_all_non_idle_commands(const char *status_text, const char *display_text) {
   remove_command_if(
       [](const Command &command) { return !command.is_idle_command; });
-  clear_non_idle_displays(status_text);
+  clear_non_idle_displays(status_text, display_text);
 }
 
 static void update_current_commands() {
@@ -479,7 +485,7 @@ static void update_current_commands() {
     commands_changed = true;
     G.mission_command_count++;
     set_display(command->shower, "");
-    set_progress(command->shower, 100);
+    //set_progress(command->shower, 100);
     PANEL(command->shower).shown_command_removed_tick = now;
 
     command = G.commands.erase(command);
@@ -583,9 +589,9 @@ static void assign_new_commands() {
           DLOG(CLIENT(doer_handle), "command assigned: %s %s [shower %s]",
                command->id.c_str(), command->desired_state.c_str(),
                CLIENT(shower_handle)->name.c_str());
-          set_status(shower_handle, "*** Attention ***");
+          set_status(shower_handle, "**Attention**");
           set_display(shower_handle, command->action);
-          set_progress(shower_handle, 100);
+          //set_progress(shower_handle, 100);
           shower->state = PANEL_ACTIVE;
           PANEL(doer_handle).state = PANEL_ACTIVE;
           PANEL(doer_handle).assigned_command_as_doer_tick = now;
@@ -620,9 +626,9 @@ static void panel_state_machine(uv_handle_t *handle) {
         CLOG(client, "PANEL_IDLE -> PANEL_READY");
         panel->state = PANEL_READY;
         panel->ready_message_tick = now;
-        set_status(handle, "*** Ready! ***");
-        set_display(handle, "");
-        set_progress(handle, 100);
+        set_status(handle, "**Ready!**");
+        set_display(handle, "Wait for it...");
+        //set_progress(handle, 100);
         set_integrity(handle);
         play_sound(JOIN_SOUND);
       } else if (command == G.commands.end() || now >= command->deadline_tick) {
@@ -633,9 +639,9 @@ static void panel_state_machine(uv_handle_t *handle) {
             assign_command(handle, handle, PANEL_IDLE_COMMAND_TIMEOUT_TICKS);
         if (command != G.commands.end()) {
           command->is_idle_command = true;
-          set_status(handle, "*** Report for duty ***");
+          set_status(handle, "**Report for duty**");
           set_display(handle, command->action);
-          set_progress(handle, 100);
+          //set_progress(handle, 100);
         }
       }
       break;
@@ -648,7 +654,8 @@ static void panel_state_machine(uv_handle_t *handle) {
         break;
       }
       if (now - panel->ready_message_tick >= PANEL_READY_MESSAGE_TICKS) {
-        set_status(handle, CHOOSE(EXCUSES));
+        set_status(handle, "**Wait for it**");
+        set_display(handle, CHOOSE(EXCUSES));
         panel->ready_message_tick = now;
       }
       G.num_ready_panels++;
@@ -689,6 +696,27 @@ static GamepadButtonMask map_gamepad_button(int sys_button) {
   return (GamepadButtonMask)0;
 }
 
+static void check_konami_code() {
+  int next_code = KONAMI_CODE[G.konami_index];
+  if (next_code) {
+    if (G.gamepad_buttons) {
+      if (G.gamepad_buttons == next_code) {
+        G.konami_index++;
+      } else {
+        G.konami_index = 0;
+      }
+    }
+  } else {
+    if (!G.gamepad_buttons) {
+      G.konami_index++;
+    }
+  }
+  if (G.konami_index == ARRAYSIZE(KONAMI_CODE)) {
+    G.konami_index = 0;
+    G.konami_code = true;
+  }
+}
+
 static void read_gamepad(uv_poll_t *poll, int status, int events) {
   uv_os_fd_t fd;
   int r = uv_fileno((uv_handle_t *)poll, &fd);
@@ -724,6 +752,7 @@ static void read_gamepad(uv_poll_t *poll, int status, int events) {
       }
     }
   }
+  check_konami_code();
   G.gamepad_new_buttons |= G.gamepad_buttons;
   if (errno == EAGAIN) {
     return;
@@ -836,16 +865,16 @@ static void game(uv_timer_t *timer) {
         GLOG("PLAYING -> END_WAIT");
         G.mode = END_WAIT;
         G.end_at_tick = now + END_WAIT_TICKS;
-        remove_all_non_idle_commands("*** Need crew ***");
+        remove_all_non_idle_commands("**Need crew**", "Activate another panel");
       } else if (hull_integrity() == 0) {
         GLOG("PLAYING -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        remove_all_non_idle_commands("*** Game over ***");
+        remove_all_non_idle_commands("**Game over**", "Use controller to enter initials");
       } else if (G.mission_command_count >= mission_timing().command_limit ||
                  now >= G.mission_end_tick) {
         GLOG("PLAYING -> SETUP_NEW_MISSION");
         G.mode = SETUP_NEW_MISSION;
-        remove_all_non_idle_commands("*** New mission ***");
+        remove_all_non_idle_commands("**New mission**", "Get ready!");
       } else {
         update_current_commands();
         assign_new_commands();
@@ -858,11 +887,11 @@ static void game(uv_timer_t *timer) {
         G.mode = PLAYING;
         G.mission_command_count = 0;
         G.mission_end_tick = now + MISSION_TIME_LIMIT_TICKS;
-        clear_non_idle_displays("*** Game on ***");
+        clear_non_idle_displays("**Game on**", "Get ready!");
       } else if (now >= G.end_at_tick) {
         GLOG("END_WAIT -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        clear_non_idle_displays("*** Game over ***");
+        clear_non_idle_displays("**Game over**", "Use controller to enter initials");
       }
       break;
     }
@@ -930,6 +959,10 @@ static void game(uv_timer_t *timer) {
     }
   }
   G.gamepad_new_buttons = 0;
+  if (G.konami_code) {
+    play_sound(CONTRA_SOUND);
+    G.konami_code = false;
+  }
   send_display_update();
   now++;
 }

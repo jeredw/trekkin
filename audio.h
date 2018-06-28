@@ -7,7 +7,8 @@ namespace trek {
       SOUND(START_MISSION, "art/engine_startup.wav"), \
       SOUND(GAME_OVER, "art/slowblip.wav"),           \
       SOUND(GOOD_COMMAND, "art/kablip.wav"),          \
-      SOUND(BAD_COMMAND, "art/whoosh.wav"), SOUND(ALARM, "art/alarm.wav"),
+      SOUND(BAD_COMMAND, "art/whoosh.wav"), SOUND(ALARM, "art/alarm.wav"), \
+      SOUND(CONTRA, "art/contra.wav"),
 
 #define SOUND(id, path) id##_SOUND
 enum Sound { SOUND_LIST NUM_SOUNDS };

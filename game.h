@@ -164,6 +164,8 @@ struct Game {
   int gamepad_buttons;
   int gamepad_new_buttons;
   bool gamepad_present;
+  int konami_index;
+  bool konami_code;
 
   std::vector<Command> commands;
   std::vector<uv_handle_t *> handles;
