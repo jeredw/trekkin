@@ -35,6 +35,14 @@ At present, ye cannae change the laws of physics.
 gpu_mem=128
 ```
 
+# New pi setup notes
+
+- `picrap/` has some assorted Linux config files to copy to exciting places.
+- Be sure to select `hdmi_mode=1` in `config.txt` to force a suitably low
+  resolution VGA mode where the pixel art can really shine.
+- Installing `libsdl2-dev` overwrites EGL and GLES symlinks from `/opt/vc/lib`
+  with mesa symlinks. You will need to replace those.
+
 # Notes
 
 ## Gameplay overview
