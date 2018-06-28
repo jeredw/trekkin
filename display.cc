@@ -385,11 +385,13 @@ static void init_bg_shaders() {
       "void main(void) {"
       "  vec2 to_center = vec2(gl_FragCoord.x - center.x, gl_FragCoord.y - "
       "center.y);"
-      "  float d = .35 * time + 40.0 * inversesqrt(dot(to_center, to_center));"
+      "  float r = sqrt(dot(to_center, to_center));"
+      "  float one_over_r = inversesqrt(dot(to_center, to_center));"
+      "  float d = .35 * time + 40.0 * one_over_r;"
       "  float theta = atan(to_center.y, to_center.x) / 3.14159;"
       "  vec4 color = texture2D(tex, vec2(d, theta));"
-      "  color.r = color.r * d * .05;"
-      "  gl_FragColor = color;"
+      "  float falloff = .002 * clamp(r, 0.0, 500.0);"
+      "  gl_FragColor = vec4(color.rgb * falloff, 1.0);"
       "}";
 
   G.bg.program = link_program(vshader_source, fshader_source);
