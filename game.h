@@ -27,7 +27,7 @@ const int GAME_TICK_MSEC = 100;
 constexpr int ms_to_ticks(int msec) { return msec / GAME_TICK_MSEC; }
 
 const int PANEL_IDLE_AFTER_TICKS = ms_to_ticks(120000);
-const int PANEL_IDLE_COMMAND_TIMEOUT_TICKS = ms_to_ticks(15000);
+const int PANEL_IDLE_COMMAND_TIMEOUT_TICKS = ms_to_ticks(30000);
 const int PANEL_READY_MESSAGE_TICKS = ms_to_ticks(5000);
 
 const int START_WAIT_TICKS = ms_to_ticks(10000);

@@ -355,7 +355,8 @@ static void init_open_gl() {
   result = eglMakeCurrent(G.display, G.surface, G.surface, G.context);
   assert(EGL_FALSE != result);
   glViewport(0, 0, G.screen_width, G.screen_height);
-  build_projection_matrix(0.f, G.screen_width, G.screen_height, 0.f, -1.f, 1.f);
+  // HACK: projector is weird
+  build_projection_matrix(-20.f, G.screen_width + 20.0f, G.screen_height + 20.0f, -20.f, -1.f, 1.f);
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);

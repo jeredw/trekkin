@@ -414,7 +414,7 @@ static void set_integrity(uv_handle_t *handle) {
 }
 
 static MissionTiming mission_timing() {
-  int mission = clamp(G.mission, 1, 1 + (int)ARRAYSIZE(MISSION_TIMING));
+  int mission = clamp(G.mission, 1, (int)ARRAYSIZE(MISSION_TIMING));
   return MISSION_TIMING[mission - 1];
 }
 
@@ -850,6 +850,7 @@ static void game(uv_timer_t *timer) {
       G.mission_command_count = 0;
       play_sound(START_MISSION_SOUND);
       GLOG("SETUP_NEW_MISSION -> NEW_MISSION");
+      send_integrity_to_non_idle();
       G.mode = NEW_MISSION;
       break;
     }
