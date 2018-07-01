@@ -34,11 +34,10 @@ const int START_WAIT_TICKS = ms_to_ticks(10000);
 
 const int MISSION_INTRO_TICKS = ms_to_ticks(5000);
 const int MISSION_TIME_LIMIT_TICKS = ms_to_ticks(90000);
-const int MISSION_COMMAND_LIMIT = 10;
 const int MISSION_BONUS = 10000;
 
 const int END_WAIT_TICKS = ms_to_ticks(15000);
-const int GAME_OVER_TICKS = ms_to_ticks(10000);
+const int GAME_OVER_TICKS = ms_to_ticks(45000);
 
 const int COMMAND_SCORE_PER_SEC = 100;
 
