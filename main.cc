@@ -59,10 +59,10 @@ static const char *const GOOD_MESSAGES[] = {
 // shown after a failed command times out
 static const char *const BAD_MESSAGES[] = {
     "baloney!",
-    "bunkum!"
+    "bunkum!",
     "egad!",
     "hogwash!", "hokum!",
-    "malarkey!"
+    "malarkey!",
     "poppycock!",
     "phooey!",
 };
