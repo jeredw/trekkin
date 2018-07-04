@@ -33,10 +33,10 @@ panels = [
         stdev_ticks_per_action = 3),
 ]
 
-def deadline(tick):
-  return (tick + 20 if tick < 100 else
-          tick + 10 if tick < 300 else
-          tick + 5)
+def deadline(game_time):
+  return (20 if game_time < 100 else
+          10 if game_time < 300 else
+          5)
 
 def summarize(xs):
   mean = sum(xs) / float(len(xs))
@@ -51,14 +51,19 @@ def simulate(panels, iter = 1000, pick_target = random.choice, deadline = deadli
   all_game_times = []
   all_missed_commands = []
   all_successful_commands = []
+  tick = 0
   for i in xrange(iter):
     missed_commands = 0
     successful_commands = 0
-    tick = 0
+    game_time = 0
     while missed_commands - successful_commands / 3 <= 5:
       tick += 1
+      game_time += 1
       for p in panels:
         if not p.shown_command:
+          if iter == 1:
+	    for q in panels:
+	      print("- {}: {}".format(q.name, q.last_targetted_tick))
           target = pick_target(panels)
           target.last_targetted_tick = tick
           target.targetted += 1
@@ -70,13 +75,19 @@ def simulate(panels, iter = 1000, pick_target = random.choice, deadline = deadli
           p.shown_command = Command(target = target,
                                     assigned_tick = tick,
                                     duration = duration,
-                                    deadline = deadline(tick))
+                                    deadline = tick + deadline(game_time))
+          if iter == 1:
+            print("{},{},{}".format(tick, p.name, target.name))
         else:
           if tick >= p.shown_command.deadline:
+            if iter == 1:
+              print("{} {} missed".format(tick, p.shown_command.target.name))
             missed_commands += 1
             p.shown_command.target.missed_commands += 1
             p.shown_command = None
           elif tick - p.shown_command.assigned_tick >= p.shown_command.duration:
+            if iter == 1:
+              print("{} {} succeeded".format(tick, p.shown_command.target.name))
             successful_commands += 1
             p.shown_command.target.successful_commands += 1
             p.shown_command = None
@@ -86,8 +97,7 @@ def simulate(panels, iter = 1000, pick_target = random.choice, deadline = deadli
           p.idle_ticks += 1
     for p in panels:
       p.shown_command = None
-      p.last_targetted_tick = 0
-    all_game_times.append(tick)
+    all_game_times.append(game_time)
     all_missed_commands.append(missed_commands)
     all_successful_commands.append(successful_commands)
   return all_game_times, all_missed_commands, all_successful_commands
