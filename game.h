@@ -53,23 +53,15 @@ enum PanelState {
 };
 
 struct Command {
-  Command()
-      : started_tick(0),
-        deadline_tick(0),
-        done(false),
-        is_idle_command(false),
-        doer(nullptr),
-        shower(nullptr) {}
-
   std::string id;
   std::string action;
   std::string desired_state;
-  int started_tick;
-  int deadline_tick;
-  bool done;
-  bool is_idle_command;
-  uv_handle_t *doer;
-  uv_handle_t *shower;
+  int started_tick = 0;
+  int deadline_tick = 0;
+  bool done = false;
+  bool is_idle_command = false;
+  uv_handle_t *doer = nullptr;
+  uv_handle_t *shower = nullptr;
 };
 
 struct Control {
@@ -79,28 +71,19 @@ struct Control {
 };
 
 struct Panel {
-  Panel()
-      : state(PANEL_NEW),
-        last_state_change_tick(0),
-        ready_message_tick(0),
-        shown_command_removed_tick(0),
-        assigned_command_as_doer_tick(0) {}
-
-  PanelState state;
-  int last_state_change_tick;
-  int ready_message_tick;
-  int shown_command_removed_tick;
-  int assigned_command_as_doer_tick;
+  PanelState state = PANEL_NEW;
+  int last_state_change_tick = 0;
+  int ready_message_tick = 0;
+  int shown_command_removed_tick = 0;
+  int assigned_command_as_doer_tick = 0;
   std::vector<Control> controls;
 };
 
 struct Client {
-  Client() : got_length_bytes(0), want_message_bytes(0) {}
-
   int id;
   std::string name;
-  ssize_t got_length_bytes;
-  ssize_t want_message_bytes;
+  ssize_t got_length_bytes = 0;
+  ssize_t want_message_bytes = 0;
   std::string pending_message;
   char recv_buf[16384];  // on unix just need one recv buffer per connection
   Panel panel;
@@ -122,49 +105,33 @@ enum GamepadButtonMask {
 };
 
 struct Game {
-  Game()
-      : mode(ATTRACT),
-        num_ready_panels(0),
-        num_active_panels(0),
-        start_at_tick(0),
-        end_at_tick(0),
-        mission(0),
-        mission_start_tick(0),
-        mission_end_tick(0),
-        mission_command_count(0),
-        good_commands(0),
-        bad_commands(0),
-        score(0),
-        connection_count(0),
-        play_count(0) {}
+  GameMode mode = ATTRACT;
 
-  GameMode mode;
+  int num_ready_panels = 0;
+  int num_active_panels = 0;
 
-  int num_ready_panels;
-  int num_active_panels;
+  int start_at_tick = 0;
+  int end_at_tick = 0;
 
-  int start_at_tick;
-  int end_at_tick;
+  int mission = 0;
+  int mission_start_tick = 0;
+  int mission_end_tick = 0;
+  int mission_command_count = 0;
 
-  int mission;
-  int mission_start_tick;
-  int mission_end_tick;
-  int mission_command_count;
-
-  int good_commands;
-  int bad_commands;
-  int score;
-  int connection_count;
-  int play_count;
+  int good_commands = 0;
+  int bad_commands = 0;
+  int score = 0;
+  int connection_count = 0;
+  int play_count = 0;
 
   std::string initials;
-  int cur_initial;
+  int cur_initial = 0;
 
-  int gamepad_buttons;
-  int gamepad_new_buttons;
-  bool gamepad_present;
-  int konami_index;
-  bool konami_code;
+  int gamepad_buttons = 0;
+  int gamepad_new_buttons = 0;
+  bool gamepad_present = false;
+  int konami_index = 0;
+  bool konami_code = false;
 
   std::vector<Command> commands;
   std::vector<uv_handle_t *> handles;
