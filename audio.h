@@ -2,11 +2,11 @@
 
 namespace trek {
 
-#define SOUND_LIST                                    \
-  SOUND(JOIN, "art/laser.wav"),                       \
-      SOUND(START_MISSION, "art/engine_startup.wav"), \
-      SOUND(GAME_OVER, "art/slowblip.wav"),           \
-      SOUND(GOOD_COMMAND, "art/kablip.wav"),          \
+#define SOUND_LIST                                                         \
+  SOUND(JOIN, "art/laser.wav"),                                            \
+      SOUND(START_MISSION, "art/engine_startup.wav"),                      \
+      SOUND(GAME_OVER, "art/slowblip.wav"),                                \
+      SOUND(GOOD_COMMAND, "art/kablip.wav"),                               \
       SOUND(BAD_COMMAND, "art/whoosh.wav"), SOUND(ALARM, "art/alarm.wav"), \
       SOUND(CONTRA, "art/contra.wav"),
 

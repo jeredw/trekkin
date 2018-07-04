@@ -86,9 +86,9 @@ static const MissionTiming MISSION_TIMING[] = {
 };
 
 static const int KONAMI_CODE[] = {
-    DPAD_UP, 0, DPAD_UP, 0, DPAD_DOWN, 0, DPAD_DOWN, 0,
-    DPAD_LEFT, 0, DPAD_RIGHT, 0, DPAD_LEFT, 0, DPAD_RIGHT, 0,
-    B_BUTTON, 0, A_BUTTON, 0, START_BUTTON,
+    DPAD_UP,   0, DPAD_UP,    0, DPAD_DOWN,    0, DPAD_DOWN,  0,
+    DPAD_LEFT, 0, DPAD_RIGHT, 0, DPAD_LEFT,    0, DPAD_RIGHT, 0,
+    B_BUTTON,  0, A_BUTTON,   0, START_BUTTON,
 };
 
 static uv_poll_t gamepad;
@@ -418,13 +418,14 @@ static MissionTiming mission_timing() {
   return MISSION_TIMING[mission - 1];
 }
 
-static void clear_non_idle_displays(const char *status_text, const char *display_text) {
+static void clear_non_idle_displays(const char *status_text,
+                                    const char *display_text) {
   for (auto handle : G.handles) {
     if (PANEL(handle).state == PANEL_READY ||
         PANEL(handle).state == PANEL_ACTIVE) {
       set_status(handle, status_text);
       set_display(handle, display_text);
-      //set_progress(handle, 0);
+      // set_progress(handle, 0);
     }
   }
 }
@@ -438,7 +439,8 @@ static void send_integrity_to_non_idle() {
   }
 }
 
-static void remove_all_non_idle_commands(const char *status_text, const char *display_text) {
+static void remove_all_non_idle_commands(const char *status_text,
+                                         const char *display_text) {
   remove_command_if(
       [](const Command &command) { return !command.is_idle_command; });
   clear_non_idle_displays(status_text, display_text);
@@ -485,7 +487,7 @@ static void update_current_commands() {
     commands_changed = true;
     G.mission_command_count++;
     set_display(command->shower, "");
-    //set_progress(command->shower, 100);
+    // set_progress(command->shower, 100);
     PANEL(command->shower).shown_command_removed_tick = now;
 
     command = G.commands.erase(command);
@@ -591,7 +593,7 @@ static void assign_new_commands() {
                CLIENT(shower_handle)->name.c_str());
           set_status(shower_handle, "**Attention**");
           set_display(shower_handle, command->action);
-          //set_progress(shower_handle, 100);
+          // set_progress(shower_handle, 100);
           shower->state = PANEL_ACTIVE;
           PANEL(doer_handle).state = PANEL_ACTIVE;
           PANEL(doer_handle).assigned_command_as_doer_tick = now;
@@ -628,7 +630,7 @@ static void panel_state_machine(uv_handle_t *handle) {
         panel->ready_message_tick = now;
         set_status(handle, "**Ready!**");
         set_display(handle, "Wait for it...");
-        //set_progress(handle, 100);
+        // set_progress(handle, 100);
         set_integrity(handle);
         play_sound(JOIN_SOUND);
       } else if (command == G.commands.end() || now >= command->deadline_tick) {
@@ -641,7 +643,7 @@ static void panel_state_machine(uv_handle_t *handle) {
           command->is_idle_command = true;
           set_status(handle, "**Report for duty**");
           set_display(handle, command->action);
-          //set_progress(handle, 100);
+          // set_progress(handle, 100);
         }
       }
       break;
@@ -870,7 +872,8 @@ static void game(uv_timer_t *timer) {
       } else if (hull_integrity() == 0) {
         GLOG("PLAYING -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        remove_all_non_idle_commands("**Game over**", "Use controller to enter initials");
+        remove_all_non_idle_commands("**Game over**",
+                                     "Use controller to enter initials");
       } else if (G.mission_command_count >= mission_timing().command_limit ||
                  now >= G.mission_end_tick) {
         GLOG("PLAYING -> SETUP_NEW_MISSION");
@@ -892,7 +895,8 @@ static void game(uv_timer_t *timer) {
       } else if (now >= G.end_at_tick) {
         GLOG("END_WAIT -> SETUP_GAME_OVER");
         G.mode = SETUP_GAME_OVER;
-        clear_non_idle_displays("**Game over**", "Use controller to enter initials");
+        clear_non_idle_displays("**Game over**",
+                                "Use controller to enter initials");
       }
       break;
     }

@@ -356,7 +356,8 @@ static void init_open_gl() {
   assert(EGL_FALSE != result);
   glViewport(0, 0, G.screen_width, G.screen_height);
   // HACK: projector is weird
-  build_projection_matrix(-20.f, G.screen_width + 20.0f, G.screen_height + 20.0f, -20.f, -1.f, 1.f);
+  build_projection_matrix(-20.f, G.screen_width + 20.0f,
+                          G.screen_height + 20.0f, -20.f, -1.f, 1.f);
 
   glEnable(GL_BLEND);
   glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA);
@@ -785,18 +786,14 @@ static void layout_instructions() {
   y += 1.5 * lineheight;
   struct {
     int color;
-    const char* const text;
+    const char *const text;
   } lines[] = {
-    2, "Gather 2 or more crew",
-    2, "... take up your stations",
-    2, "",
-    3, "Follow orders",
-    3, "... at your stations",
-    3, "",
-    5, "Relay orders when required",
-  };
+        2, "Gather 2 or more crew",      2, "... take up your stations", 2, "",
+        3, "Follow orders",              3, "... at your stations",      3, "",
+        5, "Relay orders when required",
+    };
   for (int i = 0; i < (int)ARRAYSIZE(lines); i++) {
-    auto* line = lines[i].text;
+    auto *line = lines[i].text;
     if (strlen(line) != 0) {
       push_text(20, y, colors[lines[i].color], line, SCALE /* scale */);
     }
@@ -805,7 +802,8 @@ static void layout_instructions() {
   y = G.screen_height - SCALE * lineheight + 1;
   float tag_width;
   measure_text("Pray for a true peace in space", &tag_width, nullptr);
-  push_text(G.screen_width / 2 - 0.5 * SCALE * tag_width / 2, y, colors[4], "Pray for a true peace in space", 0.5 * SCALE /* scale */);
+  push_text(G.screen_width / 2 - 0.5 * SCALE * tag_width / 2, y, colors[4],
+            "Pray for a true peace in space", 0.5 * SCALE /* scale */);
 }
 
 static void push_panel_state() {
