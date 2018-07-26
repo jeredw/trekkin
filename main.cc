@@ -919,7 +919,7 @@ static void game(uv_timer_t *timer) {
     case GAME_OVER: {
       int buttons = G.gamepad_buttons | G.gamepad_new_buttons;
       if (buttons) {
-        G.end_at_tick = now + G.end_at_tick;
+        G.end_at_tick = now + GAME_OVER_TICKS;
       }
       if (buttons & DPAD_UP) {
         const char *letter = strchr(INITIALS, G.initials[G.cur_initial]);
